@@ -28,57 +28,25 @@ sf_config_instance = SFConfig()
 sf_queues_instance = SFQueues()
 MainLogger, SF_connection = initialize(sf_config_instance=sf_config_instance, log_level='INFO')
 
-
-target_date = datetime.utcnow() - timedelta(hours=1)
-target_date_str = target_date.strftime("%Y-%m-%dT%H:%M:%S.000+0000")
-
 queue_selector_string = ''
 for queue_id in sf_queues_instance.queue_dict.values():
     queue_selector_string += "'" + queue_id + "',"
 queue_selector_string = queue_selector_string[:-1]
 
-case_check_query = "SELECT id, caseid, targetdate FROM casemilestone where IsCompleted != True and "\
-                   "caseid in "\
-                        "(SELECT id from case WHERE Time_to_Respond__c < 60 and status != 'Junk' and OwnerId in (" + queue_selector_string + "))"
-cases_in_check = SF_connection.query(query=case_check_query)
+case_check_query = "SELECT id, OwnerId, Status, CaseNumber, Previous_Owner__c, CreatedDate, Subject, AccountId, Flag__c, Manager_of_Case_Owner__c from case WHERE Time_to_Respond__c < 100 and Time_to_Respond__c > 0 and status in ('New', 'Open') and FTR_Case_Owner__c = null"
+found_cases = SF_connection.query(query=case_check_query)
 
-for row in cases_in_check['records']:
-    casemilestone_id = row['Id']
-    case_id = row['CaseId']
-    target_date = row['TargetDate']
-    try:
-        case = SF_connection.Case.get(case_id)
-        case_info = {
-            'OwnerId': case['OwnerId'],
-            'Manager_of_Case_Owner__c': case['Manager_of_Case_Owner__c'],
-            'CreatedDate': case['CreatedDate'],
-            'AccountId': case['AccountId'],
-            'CaseNumber': case['CaseNumber']
-        }
-        print(case_info['CaseNumber'], case_info['OwnerId'])
-        owner_name = None
-        queue_name = None
-        try:
-            queue_name = [key for key, value in sf_queues_instance.queue_dict.iteritems() if value == case_info['OwnerId']][0]
-        except:
-            try:
-                owner_name = SF_connection.USER.get(case['OwnerId'])
-            except:
-                queue_name = SF_connection.Group.get(case['OwnerId'])
-        if queue_name is None:
-            print(owner_name)
-        else:
-            print(queue_name)
-    except Exception as error:
-        print(error)
-
-
-#case = SF_connection.Case.get('5550e000003FTPqAAO')
-#print(case)
-#case = SF_connection.Case.get_by_custom_id('CaseNumber', '02679161')
-#print(case)
-
-
-#SLA = SF_connection.casemilestone.get('55532000000N3DtAAK')
-#print(SLA)
-
+for row in found_cases['records']:
+    case_info = {
+        'CaseNumber': row['CaseNumber'],
+        'id': row['Id'],
+        'OwnerId': row['OwnerId'],
+        'Status': row['Status'],
+        'CreatedDate': row['CreatedDate'],
+        'Subject': row['Subject'],
+        'AccountId': row['AccountId'],
+        'Flag__c': row['Flag__c'],
+        'Previous_Owner__c': row['Previous_Owner__c'],
+        'Manager_of_Case_Owner__c': row['Manager_of_Case_Owner__c']
+    }
+    print(case_info)
