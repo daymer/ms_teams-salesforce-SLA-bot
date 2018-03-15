@@ -2,3 +2,4 @@
 configuration.py
 test_2.py
 test.py
+*.log
