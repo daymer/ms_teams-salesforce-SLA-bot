@@ -1,11 +1,12 @@
-from simple_salesforce import Salesforce
+from simple_salesforce import Salesforce, exceptions
 import pyodbc
 import configuration
 import logging
 import re
 from collections import namedtuple
 from abc import ABCMeta
-
+import sys
+import pymsteams
 
 
 class Threat(object):
@@ -24,8 +25,48 @@ class CaseSLA(Threat):
         self.case_info_tuple = case_info
 
 
+def sf_get_user_name(sf_connection: Salesforce, user_id: str)->tuple:
+    try:
+        user_name = sf_connection.USER.get(user_id)
+        answer = (user_name['Username'],)
+        return answer
+    except exceptions.SalesforceResourceNotFound:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('SalesforceResourceNotFound', {'user_id': user_id, 'exception': exc_tuple[1]})
+    except Exception:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('OtherException', {'user_id': user_id, 'exception': exc_tuple[1]})
+
+
+def sf_get_group_name(sf_connection: Salesforce, group_id: str)->tuple:
+    try:
+        group = sf_connection.GROUP.get(group_id)
+        answer = (group['Name'],)
+        return answer
+    except exceptions.SalesforceResourceNotFound:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('SalesforceResourceNotFound', {'group_id': group_id, 'exception': exc_tuple[1]})
+    except Exception:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('OtherException', {'group_id': group_id, 'exception': exc_tuple[1]})
+
+
+def sf_get_user_or_group(sf_connection: Salesforce, user_or_group_id: str)->tuple:
+    try:
+        user_name = sf_get_user_name(sf_connection=sf_connection, user_id=user_or_group_id)
+        return user_name
+    except exceptions.SalesforceResourceNotFound:
+        try:
+            group_name = sf_get_group_name(sf_connection=sf_connection, group_id=user_or_group_id)
+            return group_name
+        except exceptions.SalesforceResourceNotFound:
+            answer = (None,)
+            return answer
+
+
 def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id: str)-> str:
     target_teams_channel = 'undefined'
+    supported_source_pretty_name = None
     logger_inst = logging.getLogger()
     sf_queues_inst = configuration.SFQueues()
     queue_dict = sf_queues_inst.queue_dict
@@ -35,18 +76,18 @@ def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id
         supported_source_pretty_name = supported_source_pretty_name[0]
     except IndexError:
         try:
-            supported_source_pretty_name = [key for key in queue_dict.keys() if (queue_dict[key] == previous_case_owner_id)]
-            supported_source_pretty_name = supported_source_pretty_name[0]
-        except IndexError:
+            supported_source_pretty_name = previous_case_owner_id
+            pass
+        except KeyError:
             supported_source_pretty_name = None
-            logger_inst.error('Cannot find a target channel to notify about current_case_owner_id:' + str(current_case_owner_id) + ' and previous_case_owner_id:' + str(previous_case_owner_id))
+            logger_inst.debug('Cannot find a target channel to notify about current_case_owner_id:' + str(current_case_owner_id) + ' and Previous_Owner_Queue__c:' + str(previous_case_owner_id))
     if supported_source_pretty_name is not None:
         try:
             target_teams_channel = teams_channels_inst.webhooks_dict[supported_source_pretty_name]
         except KeyError:
-            logger_inst.error('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
+            logger_inst.debug('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
         except Exception:
-            logger_inst.error('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
+            logger_inst.debug('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
 
     return target_teams_channel
 
@@ -58,7 +99,7 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
                        "OwnerId, " \
                        "Status, " \
                        "CaseNumber, " \
-                       "Previous_Owner__c, " \
+                       "Previous_Owner_Queue__c, " \
                        "CreatedDate, " \
                        "Subject, " \
                        "AccountId, " \
@@ -80,7 +121,7 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
             'Subject': row['Subject'],
             'AccountId': row['AccountId'],
             'Flag__c': row['Flag__c'],
-            'Previous_Owner__c': row['Previous_Owner__c'],
+            'Previous_Owner__c': row['Previous_Owner_Queue__c'],
             'Manager_of_Case_Owner__c': row['Manager_of_Case_Owner__c']
         }
         found_cases_list.append(case_info)
@@ -94,6 +135,19 @@ class SQLConnector:
             + sql_config.Database + ';UID=' + sql_config.Username + ';PWD=' + sql_config.Password)
         self.cursor = self.connection.cursor()
         self.logging_inst = logging.getLogger()
+
+    def update_dbo_cases_after_notification_sent(self, row_id: str)->bool:
+        try:
+            self.cursor.execute("update [dbo].[Cases] set NotificationSent=1, NotificationSentDate=GETDATE() where ID=?", row_id)
+            self.logging_inst.debug('update of Threat with id ' + str(row_id) + ' was completed')
+            self.connection.commit()
+            return True
+        except Exception as error:
+            self.connection.rollback()
+            self.logging_inst.error(
+                'update of Threat with id ' + str(row_id) + ' has failed due to the following error \n' + str(error))
+            self.logging_inst.error('Query arguments: row_id:' + str(row_id))
+            return False
 
     def insert_into_dbo_cases(self, case_dict: dict) -> bool:
         CaseId = case_dict['Id']
@@ -159,9 +213,72 @@ class SQLConnector:
             raise NoThreadsFound('No unanswered threads were found', {'source': '[dbo].[Cases]'})
 
 
+def send_notification_to_web_hook(web_hook_url: str, threat: Threat, max_allowed_sla: int):
+    logger_inst = logging.getLogger()
+    if uri_validator(web_hook_url) is not True:
+        logger_inst.error('Malformed url: ' + str(web_hook_url))
+        return False
+    team_connection = pymsteams.connectorcard(web_hook_url)
+    if isinstance(threat, CaseSLA):
+        team_connection.text("**Case " + str(threat.case_info_tuple[2]) + " has <" + str(max_allowed_sla) + " minutes left before target response time**")
+
+        '''
+        # create the section
+        myMessageSection = pymsteams.cardsection()
+        
+        # Section Title
+        myMessageSection.title("Case " + str(threat.case_info_tuple[2]) + " has <" + str(max_allowed_sla) + " minutes left before target response time")
+        
+        # Activity Elements
+        myMessageSection.activityTitle("my activity title")
+        myMessageSection.activitySubtitle("my activity subtitle")
+        myMessageSection.activityImage("http://i.imgur.com/c4jt321l.png")
+        myMessageSection.activityText("This is my activity Text")
+
+        # Facts are key value pairs displayed in a list.
+        myMessageSection.addFact("this", "is fine")
+        myMessageSection.addFact("this is", "also fine")
+
+        # Section Text
+        myMessageSection.text("This is my section text")
+
+        # Section Images
+        myMessageSection.addImage("https://na62.salesforce.com/"+threat.case_info_tuple[3], ititle=threat.case_info_tuple[2])
+        
+        # Add your section to the connector card object before sending
+        team_connection.addSection(myMessageSection)
+        '''
+        team_connection.addLinkButton("Open case", "https://na62.salesforce.com/"+str(threat.case_info_tuple[4]))
+        # send the message.
+        result = team_connection.send()
+        return result
+    else:
+        logger_inst.error('Threat type' + str(type(threat)) + ' is not supported')
+        return False
+
+
+def uri_validator(ulr)->bool:
+    regex = re.compile(
+        r'^(?:http|ftp)s?://'  # http:// or https://
+        r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+        r'localhost|'  # localhost...
+        r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}|'  # ...or ipv4
+        r'\[?[A-F0-9]*:[A-F0-9:]+\]?)'  # ...or ipv6
+        r'(?::\d+)?'  # optional port
+        r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    try:
+        result = regex.match(ulr)
+        if result is not None:
+            return True
+        else:
+            return False
+    except:
+        return False
+
+
 class BotExpectedError(Exception):
     def __init__(self, message, arguments):
-        """Base class for other DatabaseError exceptions"""
+        """Base class for more or less expected exceptions"""
         Exception.__init__(self, message + ": {0}".format(arguments))
         self.ErrorMessage = message
         self.ErrorArguments = arguments
@@ -170,4 +287,9 @@ class BotExpectedError(Exception):
 
 class NoThreadsFound(BotExpectedError):
     """Raised when no threads were found"""
+    pass
+
+
+class SFGetUserNameError(BotExpectedError):
+    """Raised when no a provided user_id cannot be evaluated to a user_name"""
     pass

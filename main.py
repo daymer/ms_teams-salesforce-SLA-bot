@@ -7,7 +7,7 @@ import custom_logic
 
 ##############################################################
 #                        variables                           #
-MaxAllowedSLA = 6000
+MaxAllowedSLA = 600
 #                                                            #
 ##############################################################
 
@@ -39,6 +39,8 @@ sql_config_instance = SQLConfig()
 sql_connector_instance = custom_logic.SQLConnector(sql_config_instance)
 MainLogger, SF_connection = initialize(sf_config_inst=sf_config_instance, log_level='INFO', log_to_file=False)
 MainLogger.info('Main process has been initialized')
+##############################################################
+
 
 # Block A: loading source threats and uploading them to DB
 #   A1: Loading SLA cases from all Tier 1 Queues with potentially broken SLA
@@ -52,22 +54,74 @@ else:
 
 for case_dict in found_cases_list:
     case_dict['target_notification_channel'] = custom_logic.find_target_teams_channel(case_dict['OwnerId'], case_dict['Previous_Owner__c'])
-    MainLogger.info(case_dict['target_notification_channel'])
     result = sql_connector_instance.insert_into_dbo_cases(case_dict=case_dict)
     if result is not False:
         pass
     else:
         MainLogger.error('Some error has occurred, braking execution and notifying an admin')
         if isinstance(MainLogger.root.handlers[0], logging.FileHandler):
-            MainLogger.error('Log name: '+MainLogger.root.handlers[0].baseFilename)
+            MainLogger.error('Log name: ' + MainLogger.root.handlers[0].baseFilename)
             exit(1)
 
 # Block B: loading threats
+MainLogger.info('Loading threats')
+
 Threats = []
 #   B1:
 MainLogger.info('Loading cases with bad SLA')
-Threats += sql_connector_instance.select_all_unanswered_threats_from_cases()
+try:
+    Threats += sql_connector_instance.select_all_unanswered_threats_from_cases()
+except custom_logic.NoThreadsFound as error:
+    logging.info(error)
 
+if len(Threats) > 0:
+    MainLogger.info('Threats loaded, processing')
+else:
+    MainLogger.debug('no threats found, skipping')
 # Block C: reacting on threats
+
 for Threat in Threats:
-    print(Threat.target_notification_channel)
+    if not isinstance(Threat, custom_logic.CaseSLA):
+        MainLogger.debug('Unsupported threat type, skipping')
+        continue
+    try:
+        # In order to save the info regarding currently unsupported target_notification_channels,
+        # we should resolve CO and pCO:
+        if Threat.target_notification_channel == 'undefined':
+            MainLogger.error('Unsupported target_notification_channel type, skipping')
+            CO = Threat.case_info_tuple[3]
+            pCO = Threat.case_info_tuple[11]
+            # both could be a user or a group
+            try:
+                MainLogger.debug('Trying to locate CO')
+                CO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=CO)[0]
+            except custom_logic.SFGetUserNameError:
+                MainLogger.debug('Failed to locate CO, skipping')
+                pass
+            try:
+                MainLogger.debug('Trying to locate pCO')
+                pCO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=pCO)[0]
+            except custom_logic.SFGetUserNameError:
+                MainLogger.debug('Failed to locate pCO, skipping')
+                pass
+            MainLogger.info('Unsupported target notification channel, CO of the case is:' + str(CO) + ' and pCO is:' + str(pCO))
+            sql_connector_instance.update_dbo_cases_after_notification_sent(row_id=Threat.case_info_tuple[1])
+        elif Threat.target_notification_channel.startswith('https://outlook.office.com/webhook/'):
+            MainLogger.info('Reacting on threat: case '+str(Threat.case_info_tuple[2]))
+            result = custom_logic.send_notification_to_web_hook(web_hook_url=Threat.target_notification_channel, threat=Threat, max_allowed_sla=MaxAllowedSLA)
+            if result is not True:
+                MainLogger.error('Failed to send notification to ' + str(Threat.target_notification_channel))
+            else:
+                result = sql_connector_instance.update_dbo_cases_after_notification_sent(row_id=Threat.case_info_tuple[1])
+                if result is not True:
+                    MainLogger.critical('Failed to update DB around row:' + str(Threat.case_info_tuple[1]))
+                elif result is True:
+                    MainLogger.info('Threat neutralized and processed')
+                    exit()
+        else:
+            pass
+
+    except Exception as error:
+        MainLogger.error('Some unknown error has occurred: \n' + str(error))
+        exit()
+
