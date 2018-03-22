@@ -1,6 +1,4 @@
-
 configuration.py
-test_2.py
-test.py
+test*
 *.log
 *.pyc

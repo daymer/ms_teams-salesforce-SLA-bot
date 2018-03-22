@@ -16,6 +16,7 @@ class Threat(object):
         self.completed = False
         self.respond_from_target = False
         self.notification_date = False
+        self.current_SLA = None
         self.target_notification_channel = target_notification_channel
 
 
@@ -128,6 +129,19 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
     return found_cases_list
 
 
+def get_current_case_sla(sf_connection: Salesforce, case_id: str):
+    try:
+        case_sla = sf_connection.CASE.get(case_id)
+        answer = case_sla['Time_to_Respond__c']
+        return answer
+    except exceptions.SalesforceResourceNotFound:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('SalesforceResourceNotFound', {'case_id': case_id, 'exception': exc_tuple[1]})
+    except Exception:
+        exc_tuple = sys.exc_info()
+        raise SFGetUserNameError('OtherException', {'case_id': case_id, 'exception': exc_tuple[1]})
+
+
 class SQLConnector:
     def __init__(self, sql_config: configuration.SQLConfig):
         self.connection = pyodbc.connect(
@@ -149,7 +163,7 @@ class SQLConnector:
             self.logging_inst.error('Query arguments: row_id:' + str(row_id))
             return False
 
-    def insert_into_dbo_cases(self, case_dict: dict) -> bool:
+    def insert_into_dbo_cases(self, case_dict: dict, rule: str) -> bool:
         CaseId = case_dict['Id']
         CaseNumber = case_dict['CaseNumber']
         OwnerId = case_dict['OwnerId']
@@ -165,11 +179,11 @@ class SQLConnector:
         Manager_of_Case_Owner = case_dict['Manager_of_Case_Owner__c']
         target_notification_channel = case_dict['target_notification_channel']
         case_tuple = (CaseNumber, OwnerId, CaseId, CreatedDate, target_notification_channel, Status, Subject, AccountId, Flag, Previous_Owner,
-                      Manager_of_Case_Owner)
+                      Manager_of_Case_Owner, rule)
         try:
             self.cursor.execute(
-                "insert into [SLA_bot].[dbo].[Cases] values(NEWID(),?,?,?,?,GETDATE(), 0, Null, ?,?,?,?,?,?,?)",
-                *case_tuple[0:11])
+                "insert into [SLA_bot].[dbo].[Cases] values(NEWID(),?,?,?,?,GETDATE(), 0, Null, ?,?,?,?,?,?,?,?)",
+                *case_tuple[0:12])
             self.connection.commit()
             self.logging_inst.info(
                 '----insertion of case ' + case_dict['CaseNumber'] + ' was completed')
@@ -220,9 +234,22 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat, max_allowed
         return False
     team_connection = pymsteams.connectorcard(web_hook_url)
     if isinstance(threat, CaseSLA):
-        team_connection.text("**Case " + str(threat.case_info_tuple[2]) + " has <" + str(max_allowed_sla) + " minutes left before target response time**")
+        #team_connection.text("**<at>@Test channel</at>, Case 0" + str(threat.case_info_tuple[2]) + " has <" + str(max_allowed_sla) + " minutes left before target response time**")
+        team_connection.text("**Case 0" + str(threat.case_info_tuple[2]) + "** has **<" + str(
+            max_allowed_sla) + "** minutes left before a target response time")
 
         '''
+        
+def entities(self, type, id, name):
+    self.payload["entities"] = []
+    newfact = {
+        'type' : type,
+        'id': id,
+        'name': name
+    }
+    self.payload["entities"].append(newfact)
+
+        
         # create the section
         myMessageSection = pymsteams.cardsection()
         
@@ -250,6 +277,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat, max_allowed
         '''
         team_connection.addLinkButton("Open case", "https://na62.salesforce.com/"+str(threat.case_info_tuple[4]))
         # send the message.
+        #team_connection.entities(type='mention', id='ba07baab-431b-49ed-add7-cbc3542f5140', name='Test channel')
         result = team_connection.send()
         return result
     else:
