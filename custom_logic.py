@@ -56,18 +56,18 @@ def sf_get_user_or_group(sf_connection: Salesforce, user_or_group_id: str)->tupl
     try:
         user_name = sf_get_user_name(sf_connection=sf_connection, user_id=user_or_group_id)
         return user_name
-    except exceptions.SalesforceResourceNotFound:
+    except (exceptions.SalesforceResourceNotFound, SFGetUserNameError):
         try:
             group_name = sf_get_group_name(sf_connection=sf_connection, group_id=user_or_group_id)
             return group_name
-        except exceptions.SalesforceResourceNotFound:
+        except (exceptions.SalesforceResourceNotFound, SFGetUserNameError):
             answer = (None,)
             return answer
 
 
 def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id: str)-> str:
     target_teams_channel = 'undefined'
-    supported_source_pretty_name = None
+    # supported_source_pretty_name = None
     logger_inst = logging.getLogger()
     sf_queues_inst = configuration.SFQueues()
     queue_dict = sf_queues_inst.queue_dict
@@ -93,9 +93,11 @@ def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id
     return target_teams_channel
 
 
-def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: int = 60) -> list:
+def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: int = 60, min_allowed_sla: int = 0) -> list:
     if max_allowed_sla < 0:
         max_allowed_sla = 60
+    if min_allowed_sla < 0:
+        min_allowed_sla = 0
     case_check_query = "SELECT id, " \
                        "OwnerId, " \
                        "Status, " \
@@ -107,7 +109,7 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
                        "Flag__c, " \
                        "Manager_of_Case_Owner__c from case " \
                             "WHERE Time_to_Respond__c <= " + str(max_allowed_sla) + " and " \
-                                  "Time_to_Respond__c > 0 and " \
+                                  "Time_to_Respond__c > " + str(min_allowed_sla) + " and " \
                                   "status in ('New', 'Open') and " \
                                   "FTR_Case_Owner__c = null"
     found_cases = sf_connection.query(query=case_check_query)

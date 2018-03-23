@@ -2,17 +2,17 @@ from simple_salesforce import Salesforce
 import simple_salesforce
 from configuration import SFConfig, SFQueues, SQLConfig, TeamsChannels
 import logging
-from datetime import datetime
+from datetime import datetime, time
 import custom_logic
+import sys
+import time as other_time
 
 ##############################################################
 #                        variables                           #
 MaxAllowedSLA = 61
-
-
+Query_Delay = 60
 #                                                            #
 ##############################################################
-
 
 def initialize(sf_config_inst: SFConfig, log_level: str = 'INFO', log_to_file: bool = False):
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
@@ -49,10 +49,10 @@ MainLogger.info('Main process has been initialized')
 ##############################################################
 
 
-def A_rule(rule: int, sf_connection: Salesforce):
+def A_rule(rule_start: int, runle_end: int, sf_connection: Salesforce):
     main_logger = logging.getLogger()
-    main_logger.info('A1: Searching for new potential SLA violations by Rule: SLA<' + str(rule))
-    found_cases_list = custom_logic.find_cases_with_potential_sla(sf_connection=sf_connection, max_allowed_sla=rule)
+    main_logger.info('A1: Searching for new potential SLA violations by Rule:' + str(runle_end) + '<SLA<' + str(rule_start))
+    found_cases_list = custom_logic.find_cases_with_potential_sla(sf_connection=sf_connection, max_allowed_sla=rule_start, min_allowed_sla=runle_end)
 
     if len(found_cases_list) == 0:
         main_logger.info('Done, no threats were found')
@@ -63,7 +63,7 @@ def A_rule(rule: int, sf_connection: Salesforce):
         case_dict['target_notification_channel'] = custom_logic.find_target_teams_channel(case_dict['OwnerId'],
                                                                                           case_dict[
                                                                                               'Previous_Owner__c'])
-        result = sql_connector_instance.insert_into_dbo_cases(case_dict=case_dict, rule=str(rule))
+        result = sql_connector_instance.insert_into_dbo_cases(case_dict=case_dict, rule=str(rule_start))
         if result is not False:
             pass
         else:
@@ -72,75 +72,124 @@ def A_rule(rule: int, sf_connection: Salesforce):
                 main_logger.error('Log name: ' + main_logger.root.handlers[0].baseFilename)
                 exit(1)
 
+Global_current_time_hour_SPB_local = datetime.now().hour
 
-# Block A: loading source threats and uploading them to DB
-#   A1: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 60
-RuleA1 = MaxAllowedSLA
-A_rule(RuleA1, SF_connection)
-# A2: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 30
-RuleA2 = 31
-A_rule(RuleA2, SF_connection)
-# A3: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 1
-RuleA3 = 1
-A_rule(RuleA3, SF_connection)
-# Block B: loading threats
-MainLogger.info('Loading threats')
+while 7 < Global_current_time_hour_SPB_local < 20:
+    Global_current_time_hour_SPB_local = datetime.now().hour
+    # Block A: loading source threats and uploading them to DB
+    #   A1: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 60
+    RuleA1 = MaxAllowedSLA
+    RuleA1_end = 30
+    A_rule(RuleA1, RuleA1_end, SF_connection)
+    # A2: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 30
+    RuleA2 = 31
+    RuleA2_end = 0
+    A_rule(RuleA2, RuleA2_end, SF_connection)
+    # A3: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 1
+    RuleA3 = 1
+    RuleA3_end = 0
+    A_rule(RuleA3, RuleA3_end, SF_connection)
+    # Block B: loading threats
+    MainLogger.info('Loading threats')
 
-Threats = []
-#   B1:
-MainLogger.info('Loading cases with bad SLA')
-try:
-    Threats += sql_connector_instance.select_all_unanswered_threats_from_cases()
-except custom_logic.NoThreadsFound as error:
-    logging.info(error)
-
-if len(Threats) > 0:
-    MainLogger.info('Threats loaded, processing')
-else:
-    MainLogger.debug('no threats found, skipping')
-# Block C: reacting on threats
-
-for Threat in Threats:
-    if not isinstance(Threat, custom_logic.CaseSLA):
-        MainLogger.debug('Unsupported threat type, skipping')
-        continue
+    Threats = []
+    #   B1:
+    MainLogger.info('Loading cases with bad SLA')
     try:
-        # In order to save the info regarding currently unsupported target_notification_channels,
-        # we should resolve CO and pCO:
-        if Threat.target_notification_channel == 'undefined':
-            MainLogger.error('Unsupported target_notification_channel type, skipping')
-            CO = Threat.case_info_tuple[3]
-            pCO = Threat.case_info_tuple[11]
-            # both could be a user or a group
-            try:
-                MainLogger.debug('Trying to locate CO')
-                CO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=CO)[0]
-            except custom_logic.SFGetUserNameError:
-                MainLogger.debug('Failed to locate CO, skipping')
-                pass
-            try:
-                MainLogger.debug('Trying to locate pCOQ')
-                pCO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=pCO)[0]
-            except custom_logic.SFGetUserNameError:
-                MainLogger.debug('Failed to locate pCOQ, skipping')
-                pass
-            MainLogger.info(
-                'Unsupported target notification channel, CO of the case is:' + str(CO) + ' and pCOQ is:' + str(pCO))
-            sql_connector_instance.update_dbo_cases_after_notification_sent(row_id=Threat.case_info_tuple[1])
-        elif Threat.target_notification_channel.startswith('https://outlook.office.com/webhook/'):
-            MainLogger.info('Reacting on threat: case ' + str(Threat.case_info_tuple[2]))
-            Threat.current_SLA = custom_logic.get_current_case_sla(sf_connection=SF_connection,
-                                                                   case_id=Threat.case_info_tuple[4])
-            # A rule is already broken
-            if Threat.current_SLA is None:
-                result = sql_connector_instance.update_dbo_cases_after_notification_sent(
-                    row_id=Threat.case_info_tuple[1])
-                MainLogger.debug('Threat.current_SLA:' + str(Threat.current_SLA))
-                MainLogger.info('Threat neutralized, but not processed: it\'s too late')
-            else:
-                # Executing RuleA1 notification for a source channel
+        Threats += sql_connector_instance.select_all_unanswered_threats_from_cases()
+    except custom_logic.NoThreadsFound as error:
+        logging.info(error)
+
+    if len(Threats) > 0:
+        MainLogger.info('Threats loaded, processing')
+    else:
+        MainLogger.debug('no threats found, skipping')
+    # Block C: reacting on threats
+
+    for Threat in Threats:
+        if not isinstance(Threat, custom_logic.CaseSLA):
+            MainLogger.debug('Case' + str(Threat.case_info_tuple[2]) + 'Unsupported threat type, skipping')
+            continue
+        try:
+            # In order to save the info regarding currently unsupported target_notification_channels,
+            # we should resolve CO and pCO:
+            if Threat.target_notification_channel == 'undefined':
+                MainLogger.error('Unsupported target_notification_channel type, skipping')
+                CO = Threat.case_info_tuple[3]
+                pCO = Threat.case_info_tuple[11]
+                # both could be a user or a group
+                try:
+                    MainLogger.debug('Trying to locate CO')
+                    CO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=CO)[0]
+                except custom_logic.SFGetUserNameError:
+                    MainLogger.debug('Failed to locate CO, skipping')
+                    pass
+                try:
+                    MainLogger.debug('Trying to locate pCOQ')
+                    pCO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=pCO)[0]
+                except custom_logic.SFGetUserNameError:
+                    MainLogger.debug('Failed to locate pCOQ, skipping')
+                    pass
+                MainLogger.info(
+                    'Unsupported target notification channel, CO of the case is:' + str(CO) + ' and pCOQ is:' + str(pCO))
+                sql_connector_instance.update_dbo_cases_after_notification_sent(row_id=Threat.case_info_tuple[1])
+            elif Threat.target_notification_channel.startswith('https://outlook.office.com/webhook/'):
+                MainLogger.info('Reacting on threat: case ' + str(Threat.case_info_tuple[2]))
+                Threat.current_SLA = custom_logic.get_current_case_sla(sf_connection=SF_connection,
+                                                                       case_id=Threat.case_info_tuple[4])
+
+                # Step 1: looking for an appropriate A rule:
+                # A rule is already broken
+                if Threat.current_SLA is None:
+                    result = sql_connector_instance.update_dbo_cases_after_notification_sent(
+                        row_id=Threat.case_info_tuple[1])
+                    MainLogger.debug('Threat.current_SLA:' + str(Threat.current_SLA))
+                    MainLogger.info('Threat neutralized, but not processed: it\'s too late')
+                    continue
+                # A rule is not violated, looking for a channel
+                MainLogger.info('Looking for an appropriate A rule, current case SLA:' + str(Threat.current_SLA))
                 Threat.current_SLA = int(Threat.current_SLA)
-                if Threat.current_SLA <= RuleA1 and Threat.current_SLA > RuleA2 and Threat.case_info_tuple[1]:
+                if Threat.current_SLA >= RuleA2 and Threat.case_info_tuple[1]:
+                    # Adding a special forwarding rule A2_1-4 for "Tier 1 - Europe OR Tier Russian OR Tier Portuguese"
+                    # Testing CO and PCOQ:
+                    CO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection, user_or_group_id=Threat.case_info_tuple[3])[0]
+                    if CO is None:
+                        exc_tuple = sys.exc_info()
+                        raise custom_logic.SFGetUserNameError('Testing CO and PCOQ has failed', {'user_or_group_id': Threat.case_info_tuple[3], 'exception': exc_tuple[1]})
+                    PCOQ = Threat.case_info_tuple[11]
+                    MainLogger.info('CO:' + str(CO) + ' with ID: ' + str(Threat.case_info_tuple[3]) + ', PCOQ: ' + str(PCOQ))
+                    USE_A1_SHIFT = False
+                    if PCOQ is not None:
+                            if PCOQ in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese']:
+                                USE_A1_SHIFT = True
+                    elif CO in [sf_queues_instance.queue_dict['Tier 1 - Europe'], sf_queues_instance.queue_dict['Tier 1 - Europe'], sf_queues_instance.queue_dict['Tier 1 - Europe']]:
+                        USE_A1_SHIFT = True
+                    if USE_A1_SHIFT is True:
+                        # Testing time:
+                        current_time_hour_utc = datetime.utcnow().hour
+                        if (8 - 3) <= current_time_hour_utc < (12 - 3):
+                            # 8 - 12pm GMT+3
+                            Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 1']
+                        elif (12 - 3) <= current_time_hour_utc < (14 - 3):
+                            # 12pm - 2pm GMT+3
+                            Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 2']
+                        elif (14 - 3) <= current_time_hour_utc < (16 - 3):
+                            # 2pm - 4pm GMT+3
+                            Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 3']
+                        elif (16 - 3) <= current_time_hour_utc < (20 - 3):
+                            # 4pm - 8pm GMT+3
+                            Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 4']
+                        else:
+                            MainLogger.info(
+                                'A1_n rule by source is ok, but now is not a right time, notifying a previously selected channel: ' + str(
+                                    Threat.target_notification_channel))
+                            USE_A1_SHIFT = False
+                    else:
+                        MainLogger.info(
+                            'A1 rule, notifying a previously selected "Case shift" channel: ' + str(Threat.target_notification_channel))
+                    if USE_A1_SHIFT is True:
+                        MainLogger.info(
+                            'A1_n rule, notifying a new selected channel: ' + str(Threat.target_notification_channel))
                     result = custom_logic.send_notification_to_web_hook(web_hook_url=Threat.target_notification_channel,
                                                                         threat=Threat,
                                                                         max_allowed_sla=Threat.current_SLA)
@@ -165,9 +214,10 @@ for Threat in Threats:
                         MainLogger.critical('Failed to update DB around row:' + str(Threat.case_info_tuple[1]))
                     elif result is True:
                         MainLogger.info('Threat neutralized and processed')
-        else:
-            pass
-
-    except Exception as error:
-        MainLogger.error('Some unknown error has occurred: \n' + str(error))
-        exit()
+            else:
+                pass
+        
+        except Exception as error:
+            MainLogger.error('Some unknown error has occurred: \n' + str(error))
+            exit()
+    other_time.sleep(Query_Delay)
