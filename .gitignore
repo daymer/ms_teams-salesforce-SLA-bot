@@ -2,3 +2,5 @@ configuration.py
 test*
 *.log
 *.pyc
+.idea/*
+*python-36.pyc
