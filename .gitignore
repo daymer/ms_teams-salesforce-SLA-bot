@@ -4,3 +4,4 @@ test*
 *.pyc
 .idea/*
 *python-36.pyc
+*.pyc

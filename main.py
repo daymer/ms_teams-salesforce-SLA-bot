@@ -121,7 +121,7 @@ def main_execution():
                 # In order to save the info regarding currently unsupported target_notification_channels,
                 # we should resolve CO and pCO:
                 if Threat.target_notification_channel == 'undefined':
-                    MainLogger.error('Unsupported target_notification_channel type, skipping')
+                    MainLogger.error('Case' + str(Threat.case_info_tuple[2]) + ': unsupported target_notification_channel type, skipping')
                     CO = Threat.case_info_tuple[3]
                     pCO = Threat.case_info_tuple[11]
                     # both could be a user or a group
@@ -172,11 +172,21 @@ def main_execution():
                             'CO:' + str(CO) + ' with ID: ' + str(Threat.case_info_tuple[3]) + ', PCOQ: ' + str(PCOQ))
                         USE_A1_SHIFT = False
                         if PCOQ is not None:
-                            if PCOQ in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese']:
+                            if PCOQ in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese', 'Tier 1 - APAC',
+                                        'Tier 1 - North America', 'Tier 1 - South America', 'Tier 1 - US Federal',
+                                        'Tier Chinese', 'Tier Dutch', 'Tier Japanese']:
                                 USE_A1_SHIFT = True
                         elif CO in [sf_queues_instance.queue_dict['Tier 1 - Europe'],
-                                    sf_queues_instance.queue_dict['Tier 1 - Europe'],
-                                    sf_queues_instance.queue_dict['Tier 1 - Europe']]:
+                                    sf_queues_instance.queue_dict['Tier Russian'],
+                                    sf_queues_instance.queue_dict['Tier 1 - APAC'],
+                                    sf_queues_instance.queue_dict['Tier Portuguese'],
+                                    sf_queues_instance.queue_dict['Tier 1 - North America'],
+                                    sf_queues_instance.queue_dict['Tier 1 - South America'],
+                                    sf_queues_instance.queue_dict['Tier 1 - US Federal'],
+                                    sf_queues_instance.queue_dict['Tier Chinese'],
+                                    sf_queues_instance.queue_dict['Tier Dutch'],
+                                    sf_queues_instance.queue_dict['Tier Japanese']
+                                    ]:
                             USE_A1_SHIFT = True
                         if USE_A1_SHIFT is True:
                             # Testing time:
