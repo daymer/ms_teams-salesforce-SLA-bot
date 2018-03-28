@@ -65,13 +65,22 @@ def sf_get_user_or_group(sf_connection: Salesforce, user_or_group_id: str)->tupl
             return answer
 
 
-def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id: str)-> str:
+def find_target_teams_channel(current_case_owner_id: str, previous_case_owner_id: str, product: str)-> str:
+    main_logger = logging.getLogger()
     target_teams_channel = 'undefined'
     # supported_source_pretty_name = None
     logger_inst = logging.getLogger()
     sf_queues_inst = configuration.SFQueues()
     queue_dict = sf_queues_inst.queue_dict
     teams_channels_inst = configuration.TeamsChannels()
+    if product in sf_queues_inst.monitor_products:
+        main_logger.info('Monitor product found, using extra logic')
+        target_teams_channel = teams_channels_inst.webhooks_dict['Tier 2 - EM:Europe']
+        return target_teams_channel
+    elif product in sf_queues_inst.agent_products:
+        main_logger.info('Agent product found, using extra logic')
+        target_teams_channel = teams_channels_inst.webhooks_dict['Tier 1 - Agents']
+        return target_teams_channel
     try:
         supported_source_pretty_name = [key for key in queue_dict.keys() if (queue_dict[key] == current_case_owner_id)]
         supported_source_pretty_name = supported_source_pretty_name[0]
@@ -107,6 +116,7 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
                        "Subject, " \
                        "AccountId, " \
                        "Flag__c, " \
+                       "Product__c, " \
                        "Manager_of_Case_Owner__c from case " \
                             "WHERE Time_to_Respond__c <= " + str(max_allowed_sla) + " and " \
                                   "Time_to_Respond__c > " + str(min_allowed_sla) + " and " \
@@ -125,7 +135,8 @@ def find_cases_with_potential_sla(sf_connection: Salesforce, max_allowed_sla: in
             'AccountId': row['AccountId'],
             'Flag__c': row['Flag__c'],
             'Previous_Owner__c': row['Previous_Owner_Queue__c'],
-            'Manager_of_Case_Owner__c': row['Manager_of_Case_Owner__c']
+            'Manager_of_Case_Owner__c': row['Manager_of_Case_Owner__c'],
+            'Product__c': row['Product__c']
         }
         found_cases_list.append(case_info)
     return found_cases_list
@@ -174,18 +185,19 @@ class SQLConnector:
         Subject = case_dict['Subject']
         AccountId = case_dict['AccountId']
         Flag = str(case_dict['Flag__c'])
-        matches = re.search(r" alt=\"(.*)\" ", Flag, re.IGNORECASE)
+        Product = case_dict['Product__c']
+        matches = re.search(r"\salt=\"([^\"]*)\"\s", Flag, re.IGNORECASE)
         if matches:
             Flag = matches.group(1)
         Previous_Owner = case_dict['Previous_Owner__c']
         Manager_of_Case_Owner = case_dict['Manager_of_Case_Owner__c']
         target_notification_channel = case_dict['target_notification_channel']
         case_tuple = (CaseNumber, OwnerId, CaseId, CreatedDate, target_notification_channel, Status, Subject, AccountId, Flag, Previous_Owner,
-                      Manager_of_Case_Owner, rule)
+                      Manager_of_Case_Owner, rule, Product)
         try:
             self.cursor.execute(
-                "insert into [SLA_bot].[dbo].[Cases] values(NEWID(),?,?,?,?,GETDATE(), 0, Null, ?,?,?,?,?,?,?,?)",
-                *case_tuple[0:12])
+                "insert into [SLA_bot].[dbo].[Cases] values(NEWID(),?,?,?,?,GETDATE(), 0, Null, ?,?,?,?,?,?,?,?,?)",
+                *case_tuple[0:13])
             self.connection.commit()
             self.logging_inst.info(
                 '----insertion of case ' + case_dict['CaseNumber'] + ' was completed')
@@ -215,7 +227,8 @@ class SQLConnector:
                 ",[AccountId]" \
                 ",[Flag]" \
                 ",[PreviousOwner]" \
-                ",[ManagerCaseOwner] FROM [dbo].[Cases]" \
+                ",[ManagerCaseOwner]" \
+                ",[Product] FROM [dbo].[Cases]" \
                     "where [NotificationSent]=0"
         self.cursor.execute(query)
         rows = self.cursor.fetchall()

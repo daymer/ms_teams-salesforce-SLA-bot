@@ -62,8 +62,8 @@ def A_rule(rule_start: int, runle_end: int, sf_connection: Salesforce):
 
     for case_dict in found_cases_list:
         case_dict['target_notification_channel'] = custom_logic.find_target_teams_channel(case_dict['OwnerId'],
-                                                                                          case_dict[
-                                                                                              'Previous_Owner__c'])
+                                                                                          case_dict['Previous_Owner__c'],
+                                                                                          case_dict['Product__c'])
         result = sql_connector_instance.insert_into_dbo_cases(case_dict=case_dict, rule=str(rule_start))
         if result is not False:
             pass
@@ -121,7 +121,7 @@ def main_execution():
                 # In order to save the info regarding currently unsupported target_notification_channels,
                 # we should resolve CO and pCO:
                 if Threat.target_notification_channel == 'undefined':
-                    MainLogger.error('Case' + str(Threat.case_info_tuple[2]) + ': unsupported target_notification_channel type, skipping')
+                    MainLogger.error('Case ' + str(Threat.case_info_tuple[2]) + ': unsupported target_notification_channel type, skipping')
                     CO = Threat.case_info_tuple[3]
                     pCO = Threat.case_info_tuple[11]
                     # both could be a user or a group
@@ -176,17 +176,9 @@ def main_execution():
                                         'Tier 1 - North America', 'Tier 1 - South America', 'Tier 1 - US Federal',
                                         'Tier Chinese', 'Tier Dutch', 'Tier Japanese']:
                                 USE_A1_SHIFT = True
-                        elif CO in [sf_queues_instance.queue_dict['Tier 1 - Europe'],
-                                    sf_queues_instance.queue_dict['Tier Russian'],
-                                    sf_queues_instance.queue_dict['Tier 1 - APAC'],
-                                    sf_queues_instance.queue_dict['Tier Portuguese'],
-                                    sf_queues_instance.queue_dict['Tier 1 - North America'],
-                                    sf_queues_instance.queue_dict['Tier 1 - South America'],
-                                    sf_queues_instance.queue_dict['Tier 1 - US Federal'],
-                                    sf_queues_instance.queue_dict['Tier Chinese'],
-                                    sf_queues_instance.queue_dict['Tier Dutch'],
-                                    sf_queues_instance.queue_dict['Tier Japanese']
-                                    ]:
+                        elif CO in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese', 'Tier 1 - APAC',
+                                        'Tier 1 - North America', 'Tier 1 - South America', 'Tier 1 - US Federal',
+                                        'Tier Chinese', 'Tier Dutch', 'Tier Japanese']:
                             USE_A1_SHIFT = True
                         if USE_A1_SHIFT is True:
                             # Testing time:
@@ -210,11 +202,11 @@ def main_execution():
                                 USE_A1_SHIFT = False
                         else:
                             MainLogger.info(
-                                'A1 rule, notifying a previously selected "Case shift" channel: ' + str(
+                                'A1 rule, notifying a previously selected channel: ' + str(
                                     Threat.target_notification_channel))
                         if USE_A1_SHIFT is True:
                             MainLogger.info(
-                                'A1_n rule, notifying a new selected channel: ' + str(
+                                'A1_n rule, notifying a new selected Case Shift channel: ' + str(
                                     Threat.target_notification_channel))
                         result = custom_logic.send_notification_to_web_hook(
                             web_hook_url=Threat.target_notification_channel,
