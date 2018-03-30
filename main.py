@@ -182,18 +182,27 @@ def main_execution():
                             USE_A1_SHIFT = True
                         if USE_A1_SHIFT is True:
                             # Testing time:
-                            current_time_hour_utc = datetime.utcnow().hour
-                            if (8 - 3) <= current_time_hour_utc < (12 - 3):
-                                # 8 - 12pm GMT+3
+                            current_time_hour_utc = datetime.utcnow()
+                            today_shift1_start = current_time_hour_utc.replace(hour=4, minute=30, second=0, microsecond=0)
+                            today_shift1_end = today_shift1_start.replace(hour=8, minute=30)
+                            today_shift2_start = today_shift1_start.replace(hour=8, minute=30)
+                            today_shift2_end = today_shift1_start.replace(hour=10, minute=30)
+                            today_shift3_start = today_shift1_start.replace(hour=10, minute=30)
+                            today_shift3_end = today_shift1_start.replace(hour=12, minute=30)
+                            today_shift4_start = today_shift1_start.replace(hour=12, minute=30)
+                            today_shift4_end = today_shift1_start.replace(hour=16, minute=30)
+
+                            if today_shift1_start <= current_time_hour_utc < today_shift1_end:
+                                # 7:30 - 11:30 am GMT+3, 4:30 - 8:30
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 1']
-                            elif (12 - 3) <= current_time_hour_utc < (14 - 3):
-                                # 12pm - 2pm GMT+3
+                            elif today_shift2_start <= current_time_hour_utc < today_shift2_end:
+                                # 11:30am - 1:30pm GMT+3, 8:30 - 10:30
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 2']
-                            elif (14 - 3) <= current_time_hour_utc < (16 - 3):
-                                # 2pm - 4pm GMT+3
+                            elif today_shift3_start <= current_time_hour_utc < today_shift3_end:
+                                # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 3']
-                            elif (16 - 3) <= current_time_hour_utc < (20 - 3):
-                                # 4pm - 8pm GMT+3
+                            elif today_shift4_start <= current_time_hour_utc < today_shift4_end:
+                                # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 4']
                             else:
                                 MainLogger.info(
