@@ -157,8 +157,8 @@ def main_execution():
                     # A rule is not violated, looking for a channel
                     MainLogger.info('Looking for an appropriate A rule, current case SLA:' + str(Threat.current_SLA))
                     Threat.current_SLA = int(Threat.current_SLA)
-                    if Threat.current_SLA >= RuleA2 and Threat.case_info_tuple[1]:
-                        # Adding a special forwarding rule A2_1-4 for "Tier 1 - Europe OR Tier Russian OR Tier Portuguese"
+                    if Threat.current_SLA > RuleA2 and Threat.case_info_tuple[1]:
+                        # Adding a special forwarding rule A1_1-4 for "Tier 1 - Europe OR Tier Russian OR Tier Portuguese"
                         # Testing CO and PCOQ:
                         CO = custom_logic.sf_get_user_or_group(sf_connection=SF_connection,
                                                                user_or_group_id=Threat.case_info_tuple[3])[0]
@@ -172,13 +172,27 @@ def main_execution():
                             'CO:' + str(CO) + ' with ID: ' + str(Threat.case_info_tuple[3]) + ', PCOQ: ' + str(PCOQ))
                         USE_A1_SHIFT = False
                         if PCOQ is not None:
-                            if PCOQ in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese', 'Tier 1 - APAC',
-                                        'Tier 1 - North America', 'Tier 1 - South America', 'Tier 1 - US Federal',
-                                        'Tier Chinese', 'Tier Dutch', 'Tier Japanese']:
+                            if PCOQ in ['Tier 1 - Europe',
+                                        'Tier Russian',
+                                        'Tier Portuguese',
+                                        'Tier 1 - APAC',
+                                        'Tier 1 - North America',
+                                        'Tier 1 - South America',
+                                        'Tier 1 - US Federal',
+                                        'Tier Chinese',
+                                        'Tier Dutch',
+                                        'Tier Japanese']:
                                 USE_A1_SHIFT = True
-                        elif CO in ['Tier 1 - Europe', 'Tier Russian', 'Tier Portuguese', 'Tier 1 - APAC',
-                                        'Tier 1 - North America', 'Tier 1 - South America', 'Tier 1 - US Federal',
-                                        'Tier Chinese', 'Tier Dutch', 'Tier Japanese']:
+                        elif CO in ['Tier 1 - Europe',
+                                    'Tier Russian',
+                                    'Tier Portuguese',
+                                    'Tier 1 - APAC',
+                                    'Tier 1 - North America',
+                                    'Tier 1 - South America',
+                                    'Tier 1 - US Federal',
+                                    'Tier Chinese',
+                                    'Tier Dutch',
+                                    'Tier Japanese']:
                             USE_A1_SHIFT = True
                         if USE_A1_SHIFT is True:
                             # Testing time:
@@ -193,16 +207,16 @@ def main_execution():
                             today_shift4_end = today_shift1_start.replace(hour=16, minute=30)
 
                             if today_shift1_start <= current_time_hour_utc < today_shift1_end:
-                                # 7:30 - 11:30 am GMT+3, 4:30 - 8:30
+                                # 7:30 - 11:30 am GMT+3, 4:30 - 8:30 UTC
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 1']
                             elif today_shift2_start <= current_time_hour_utc < today_shift2_end:
-                                # 11:30am - 1:30pm GMT+3, 8:30 - 10:30
+                                # 11:30am - 1:30pm GMT+3, 8:30 - 10:30 UTC
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 2']
                             elif today_shift3_start <= current_time_hour_utc < today_shift3_end:
-                                # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30
+                                # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30 UTC
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 3']
                             elif today_shift4_start <= current_time_hour_utc < today_shift4_end:
-                                # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30
+                                # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30 UTC
                                 Threat.target_notification_channel = teams_channels_inst.webhooks_dict['Case shift 4']
                             else:
                                 MainLogger.info(

@@ -251,7 +251,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat, max_allowed
     if isinstance(threat, CaseSLA):
         #team_connection.text("**<at>@Test channel</at>, Case 0" + str(threat.case_info_tuple[2]) + " has <" + str(max_allowed_sla) + " minutes left before target response time**")
         team_connection.text("**Case 0" + str(threat.case_info_tuple[2]) + "** has **<" + str(
-            max_allowed_sla) + "** minutes left before a target response time")
+            max_allowed_sla) + "** minutes left before the target response time")
 
         '''
         
