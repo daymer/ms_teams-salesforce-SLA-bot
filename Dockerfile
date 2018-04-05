@@ -15,7 +15,7 @@ RUN cd /Elisa
 RUN git clone https://github.com/daymer/ms_teams-salesforce-SLA-bot
 RUN pip install --upgrade pip
 RUN pip install -r /Elisa/requirements.txt
-RUN mkdir /Elisa/logs
-ADD Configuration.py /Elisa/
+RUN mkdir /var/log/elisa/
+ADD configuration.py /Elisa/
 RUN chmod +x /Elisa/launch_Elisa.sh
 CMD ["/bin/bash", "/Elisa/launch_Elisa.sh"]
