@@ -71,13 +71,13 @@ def a_rule(rule_start: int, rule_end: int, sf_connection: Salesforce):
                 exit(1)
 
 
-Global_current_time_hour_SPB_local = datetime.now().hour
+Global_UTC_current_time_hour = datetime.utcnow().hour
 
 
 def main_execution():
-    global Global_current_time_hour_SPB_local
-    Global_current_time_hour_SPB_local = datetime.now().hour
-    if 7 < Global_current_time_hour_SPB_local < 20:
+    global Global_UTC_current_time_hour
+    Global_UTC_current_time_hour = datetime.now().hour
+    if 4 < Global_UTC_current_time_hour < 17:
         sf_config_inst_2 = SFConfig()
         s_f_connection = Salesforce(username=sf_config_inst_2.user, password=sf_config_inst_2.password,
                                    security_token=sf_config_inst_2.token)
