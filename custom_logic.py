@@ -555,7 +555,7 @@ class SQLConnectorKARMADB:
                     ",[link]"\
                     ",[xwd_fullname] "\
                     "FROM [dbo].[WebRequests_delete_page_by_XWD_FULLNAME] "\
-                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) = 1"
+                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) <= 1"
         elif event_type == 'reindex':
             query = "SELECT [ID]"\
                     ",[date]"\
@@ -563,7 +563,7 @@ class SQLConnectorKARMADB:
                     ",[xwd_fullname]" \
                     ",[full] " \
                     "FROM [dbo].[WebRequests_reindex_page_by_XWD_FULLNAME]"\
-                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) = 1 "
+                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) <= 1 "
         elif event_type == 'vote':
             query = "SELECT [ID]"\
                     ",[date]"\
@@ -572,7 +572,7 @@ class SQLConnectorKARMADB:
                     ",[user_name] " \
                     ",[direction] " \
                     "FROM [dbo].[WebRequests_vote_for_page_as_user] "\
-                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) = 1"
+                    "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) <= 1"
         else:
             self.logging_inst.critical('Requested Event type is not supported: ' + event_type)
             return []
