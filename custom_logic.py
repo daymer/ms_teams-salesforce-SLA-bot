@@ -338,7 +338,7 @@ class SQLConnectorELISADB:
     def select_existence_id_from_karma_events(self, xwd_fullname, event_type, created_date):
         query = "SELECT count([ID]) as cc "\
                 "FROM [dbo].[Karma_events] "\
-                "where[xwd_fullname] = ? and [Type] = ? and DATEDIFF(HH, [CreatedDate], ?) = 1 and [NotificationSent] <= 1"
+                "where[xwd_fullname] = ? and [Type] = ? and DATEDIFF(HH, [CreatedDate], ?) <= 1 and [NotificationSent] = 1"
         self.cursor.execute(query, xwd_fullname, event_type, created_date)
         row = self.cursor.fetchone()
         if row:
