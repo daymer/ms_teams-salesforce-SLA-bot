@@ -369,7 +369,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
         sql_config_instance_karma_db = configuration.SQLConfigKARMADB()
         sql_connector_instance_karma_db = SQLConnectorKARMADB(sql_config_instance_karma_db)
         if threat.event_type == 'delete':
-            text = 'Page was **deleted** from xWiki, former page id was **"' + str(threat.info_tuple[5]) + '"**'
+            text = 'Page was **deleted** from xWiki, former page id: **"' + str(threat.info_tuple[5]) + '"**'
             team_connection.text(text)
             team_connection.color('EB984E')
             result = team_connection.send()
@@ -377,17 +377,17 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
         elif threat.event_type == 'vote':
             page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
             page_stats = sql_connector_instance_karma_db.select_page_stats(xwd_id=str(threat.info_tuple[5]))
+            pretty_name  = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
             if threat.info_tuple[7] == 1:
-                text = '**Up voted** **"' + page_name + '"** by ' + str(threat.info_tuple[6][2:]).capitalize()+threat.info_tuple[6][-2:] + '\n\n'
+                text = '**Up voted** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             else:
-                text = '**Down voted** **"' + page_name + '"**' + str(threat.info_tuple[6][2:]).capitalize()+threat.info_tuple[6][-2:] + '\n\n'
+                text = '**Down voted** **"' + page_name + '"**' + pretty_name + '\n\n'
             text += 'Top contributor(s):'
             for key, value in page_stats['contributors_percents'].items():
                 if key == 'XWiki.bot':
                     continue
                 text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
-            text = text[:-1] + '\n\n'
-            # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
+            text = text[:-1] + ';'
             text += 'Karma score: ' + str(page_stats['page_karma_score'])
             team_connection.color('5DADE2')
             team_connection.text(text)
@@ -407,7 +407,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                             if key == 'XWiki.bot':
                                 continue
                             text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
-                        text = text[:-1]+'\n\n'
+                        text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('F4D03F')
@@ -425,7 +425,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                             if key == 'XWiki.bot':
                                 continue
                             text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
-                        text = text[:-1] + '\n\n'
+                        text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('C39BD3')
