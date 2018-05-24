@@ -386,7 +386,10 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             for key, value in page_stats['contributors_percents'].items():
                 if key == 'XWiki.bot':
                     continue
-                text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
+                name = str(key).replace('XWiki.', '')
+                pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                              name[2:]
+                text += ' ' + pretty_name + ' (' + str(value) + '%),'
             text = text[:-1] + ';'
             text += 'Karma score: ' + str(page_stats['page_karma_score'])
             team_connection.color('5DADE2')
@@ -406,7 +409,10 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         for key, value in page_stats['contributors_percents'].items():
                             if key == 'XWiki.bot':
                                 continue
-                            text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
+                            name = str(key).replace('XWiki.', '')
+                            pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                                          name[2:]
+                            text += ' ' + pretty_name + ' (' + str(value) + '%),'
                         text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
@@ -424,7 +430,10 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         for key, value in page_stats['contributors_percents'].items():
                             if key == 'XWiki.bot':
                                 continue
-                            text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
+                            name = str(key).replace('XWiki.', '')
+                            pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                                          name[2:]
+                            text += ' ' + pretty_name + ' (' + str(value) + '%),'
                         text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
