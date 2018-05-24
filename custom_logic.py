@@ -362,22 +362,37 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
         team_connection.text("**Case 0" + str(threat.info_tuple[2]) + "** has **<" + str(threat.current_SLA) + "** minutes left before the target response time")
         team_connection.addLinkButton("Open case", "https://na62.salesforce.com/" + str(threat.info_tuple[4]))
         #team_connection.entities(type='mention', id='ba07baab-431b-49ed-add7-cbc3542f5140', name='Test channel')
+        team_connection.color('red')
         result = team_connection.send()
         return result
     if isinstance(threat, KarmaEvent):
         sql_config_instance_karma_db = configuration.SQLConfigKARMADB()
         sql_connector_instance_karma_db = SQLConnectorKARMADB(sql_config_instance_karma_db)
         if threat.event_type == 'delete':
-            # team_connection.text(str(threat.info_tuple))
-            # team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
-            # result = team_connection.send()
-            result = True
+            text = 'Page was **deleted** from xWiki, former page id was **"' + str(threat.info_tuple[5]) + '"**'
+            team_connection.text(text)
+            team_connection.color('EB984E')
+            result = team_connection.send()
             return result
         elif threat.event_type == 'vote':
-            # team_connection.text(str(threat.info_tuple))
-            # team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
-            # result = team_connection.send()
-            result = True
+            page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
+            page_stats = sql_connector_instance_karma_db.select_page_stats(xwd_id=str(threat.info_tuple[5]))
+            if threat.info_tuple[7] == 1:
+                text = '**Up voted** **"' + page_name + '"** by ' + str(threat.info_tuple[6][2:]).capitalize()+threat.info_tuple[6][-2:] + '\n\n'
+            else:
+                text = '**Down voted** **"' + page_name + '"**' + str(threat.info_tuple[6][2:]).capitalize()+threat.info_tuple[6][-2:] + '\n\n'
+            text += 'Top contributor(s):'
+            for key, value in page_stats['contributors_percents'].items():
+                if key == 'XWiki.bot':
+                    continue
+                text += ' ' + str(key).replace('XWiki.', '') + ' (' + str(value) + '%),'
+            text = text[:-1] + '\n\n'
+            # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
+            text += 'Karma score: ' + str(page_stats['page_karma_score'])
+            team_connection.color('5DADE2')
+            team_connection.text(text)
+            team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
+            result = team_connection.send()
             return result
         elif threat.event_type == 'reindex':
             page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
@@ -395,6 +410,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         text = text[:-1]+'\n\n'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
+                        team_connection.color('F4D03F')
                     else:
                         # it's a full
                         if str(threat.info_tuple[5]).startswith('Main'):
@@ -412,8 +428,8 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         text = text[:-1] + '\n\n'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
                         text += 'Karma score: ' + str(page_stats['page_karma_score'])
+                        team_connection.color('C39BD3')
                     team_connection.text(text)
-                    team_connection.color('red')
                     team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
                     result = team_connection.send()
                     return result
