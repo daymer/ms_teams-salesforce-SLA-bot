@@ -381,7 +381,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             if threat.info_tuple[7] == 1:
                 text = '**Up voted** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             else:
-                text = '**Down voted** **"' + page_name + '"**' + pretty_name + '\n\n'
+                text = '**Down voted** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             text += 'Top contributor(s):'
             for key, value in page_stats['contributors_percents'].items():
                 if key == 'XWiki.bot':
