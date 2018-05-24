@@ -25,7 +25,7 @@ def logging_config(integration_config: Integration, logging_mode: str= 'INFO', l
         if platform == "linux" or platform == "linux2":
             with open(os.path.expanduser("~/.bashrc"), "a") as outfile:
                 # 'a' stands for "append"
-                outfile.write("export elisa_log_old="+previous_log_location)
+                outfile.write("export elisa_log_old="+str(previous_log_location))
                 outfile.write("export elisa_log=" + log_name)
         elif platform == "win32":
             # do nothing :)
