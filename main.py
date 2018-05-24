@@ -140,9 +140,9 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
         rule_a2 = 31
         rule_a2_end = 0
         a_rule(rule_a2, rule_a2_end, s_f_connection, teams_channels_inst_func)
-    #   A3: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 1
+    #   A3: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 10
     if proceed_with_a3_rule is True:
-        rule_a3 = 1
+        rule_a3 = 10
         rule_a3_end = 0
         a_rule(rule_a3, rule_a3_end, s_f_connection, teams_channels_inst_func)
     #   Ax_karma_event_rule
@@ -307,7 +307,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                             web_hook_url=RuleA2_notification_target_channel,
                             threat=Threat)
                     elif Threat.current_SLA <= rule_a3:
-                        RuleA3_notification_target_channel = teams_channels_inst_func.webhooks_dict['Tier 1 EMEA > General']
+                        RuleA3_notification_target_channel = teams_channels_inst_func.webhooks_dict['Tier 1 TL']
                         result = custom_logic.send_notification_to_web_hook(
                             web_hook_url=RuleA3_notification_target_channel,
                             threat=Threat)
