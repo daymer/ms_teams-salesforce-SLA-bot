@@ -391,7 +391,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                               name[2:]
                 text += ' ' + pretty_name + ' (' + str(value) + '%),'
             text = text[:-1] + ';'
-            text += 'Karma score: ' + str(page_stats['page_karma_score'])
+            text += ' Karma score: ' + str(page_stats['page_karma_score'])
             team_connection.color('5DADE2')
             team_connection.text(text)
             team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
@@ -415,7 +415,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                             text += ' ' + pretty_name + ' (' + str(value) + '%),'
                         text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
-                        text += 'Karma score: ' + str(page_stats['page_karma_score'])
+                        text += ' Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('F4D03F')
                     else:
                         # it's a full
@@ -436,7 +436,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                             text += ' ' + pretty_name + ' (' + str(value) + '%),'
                         text = text[:-1] + ';'
                         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
-                        text += 'Karma score: ' + str(page_stats['page_karma_score'])
+                        text += ' Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('C39BD3')
                     team_connection.text(text)
                     team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
