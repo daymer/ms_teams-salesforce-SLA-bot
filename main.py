@@ -326,7 +326,10 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                     pass
             if isinstance(Threat, custom_logic.KarmaEvent):
                 # was this page already proceed during last hour with the same reason?
-                existence = sql_connector_instance_elisa_db.select_existence_id_from_karma_events(xwd_fullname=Threat.info_tuple[5], event_type=Threat.info_tuple[2], created_date=Threat.info_tuple[3])
+                if Threat.event_type == 'reindex':
+                    existence = sql_connector_instance_elisa_db.select_existence_id_from_karma_events(xwd_fullname=Threat.info_tuple[5], event_type=Threat.info_tuple[2], created_date=Threat.info_tuple[3])
+                else:
+                    existence = False
                 if existence is False:
                     result = custom_logic.send_notification_to_web_hook(
                         web_hook_url=Threat.target_notification_channel,
