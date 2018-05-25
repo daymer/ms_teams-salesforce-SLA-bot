@@ -379,9 +379,9 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             page_stats = sql_connector_instance_karma_db.select_page_stats(xwd_id=str(threat.info_tuple[5]))
             pretty_name  = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
             if threat.info_tuple[7] == 1:
-                text = '**Up voted** **"' + page_name + '"** by ' + pretty_name + '\n\n'
+                text = '**Voted UP** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             else:
-                text = '**Down voted** **"' + page_name + '"** by ' + pretty_name + '\n\n'
+                text = '**Voted DOWN** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             text += 'Top contributor(s):'
             for key, value in page_stats['contributors_percents'].items():
                 if key == 'XWiki.bot':
