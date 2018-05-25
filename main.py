@@ -54,7 +54,7 @@ MainLogger.info('Main process has been initialized')
 ##############################################################
 
 
-def a_rule(rule_start: int, rule_end: int, sf_connection: Salesforce, teams_channels_inst: TeamsChannels, sql_connector_instance_karma_db: custom_logic.SQLConnectorKARMADB):
+def a_rule(rule_start: int, rule_end: int, sf_connection: Salesforce, teams_channels_inst: TeamsChannels):
     #   loads SF Cases by various filters
     main_logger = logging.getLogger()
     main_logger.info(
