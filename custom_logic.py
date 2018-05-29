@@ -111,15 +111,18 @@ def find_target_teams_channel_for_case_sla(current_case_owner_id: str, previous_
     return target_teams_channel
 
 
-def find_target_teams_channel_for_karma_event(event_type: str, teams_channels_inst: configuration.TeamsChannels)-> str:
+def find_target_teams_channel_for_karma_event(event_type: str, teams_channels_inst: configuration.TeamsChannels, event_dict: dict)-> str:
     main_logger = logging.getLogger()
     target_teams_channel = 'undefined'
     # supported_source_pretty_name = None
     logger_inst = logging.getLogger()
     if event_type == 'delete':
-        target_teams_channel= teams_channels_inst.webhooks_dict['xWiki change log']
-    elif event_type == 'reindex':
         target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
+    elif event_type == 'reindex':
+        if event_dict['full'] is True:
+            target_teams_channel = teams_channels_inst.webhooks_dict['Support Worldwide / General']
+        else:
+            target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
     elif event_type == 'vote':
         target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
     else:

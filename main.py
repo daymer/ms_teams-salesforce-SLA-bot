@@ -92,7 +92,7 @@ def a_karma_event_rule(sql_connector_instance_karma_db_func: custom_logic.SQLCon
     else:
         main_logger.info('Done, found ' + str(len(found_events_list)) + ' event(s)')
     for event_dict in found_events_list:
-        event_dict['target_notification_channel'] = custom_logic.find_target_teams_channel_for_karma_event(event_type, teams_channels_inst)
+        event_dict['target_notification_channel'] = custom_logic.find_target_teams_channel_for_karma_event(event_type, teams_channels_inst, event_dict)
         result = sql_connector_instance_elisa_db.insert_into_dbo_karma_events(event_dict=event_dict, event_type=event_type)
         if result is not False:
             pass

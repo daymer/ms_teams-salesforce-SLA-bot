@@ -5,3 +5,4 @@ test*
 .idea/*
 *python-36.pyc
 *.pyc
+pymsteams_test.py
