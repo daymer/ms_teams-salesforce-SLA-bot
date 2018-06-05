@@ -380,28 +380,34 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
             logger_inst.debug('page_name: ' + str(page_name))
             page_stats = sql_connector_instance_karma_db.select_page_stats(xwd_id=str(threat.info_tuple[5]))
-            logger_inst.debug('page_stats: ' + str(page_stats))
-            pretty_name = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
-            if threat.info_tuple[7] == 1:
-                text = '**Voted UP** **"' + page_name + '"** by ' + pretty_name + '\n\n'
+            if page_stats is not None:
+                logger_inst.debug('page_stats: ' + str(page_stats))
+                pretty_name = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
+                if threat.info_tuple[7] == 1:
+                    text = '**Voted UP** **"' + page_name + '"** by ' + pretty_name + '\n\n'
+                else:
+                    text = '**Voted DOWN** **"' + page_name + '"** by ' + pretty_name + '\n\n'
+                text += 'Top contributor(s):'
+                for key, value in page_stats['contributors_percents'].items():
+                    if key == 'XWiki.bot':
+                        continue
+                    name = str(key).replace('XWiki.', '')
+                    pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                                  name[2:]
+                    text += ' ' + pretty_name + ' (' + str(value) + '%),'
+                text = text[:-1] + ';'
+                text += ' Karma score: ' + str(page_stats['page_karma_score'])
+                team_connection.color('5DADE2')
+                logger_inst.debug('text: ' + str(text))
+                team_connection.text(text)
+                team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
+                result = team_connection.send()
+                return result
             else:
-                text = '**Voted DOWN** **"' + page_name + '"** by ' + pretty_name + '\n\n'
-            text += 'Top contributor(s):'
-            for key, value in page_stats['contributors_percents'].items():
-                if key == 'XWiki.bot':
-                    continue
-                name = str(key).replace('XWiki.', '')
-                pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
-                              name[2:]
-                text += ' ' + pretty_name + ' (' + str(value) + '%),'
-            text = text[:-1] + ';'
-            text += ' Karma score: ' + str(page_stats['page_karma_score'])
-            team_connection.color('5DADE2')
-            logger_inst.debug('text: ' + str(text))
-            team_connection.text(text)
-            team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
-            result = team_connection.send()
-            return result
+                logger_inst.info(
+                    'Page has less than 100 characters, no need to notify about it, page_id:' + str(
+                        threat.info_tuple[5]))
+                return True
         elif threat.event_type == 'reindex':
             page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
             if page_name is not None:
@@ -521,7 +527,7 @@ class SQLConnectorKARMADB:
             return None
         page_sql_id = result[0]
         total_characters_of_requested_page = int(result[1])
-        if total_characters_of_requested_page < 1:
+        if total_characters_of_requested_page < 100:
             return None
         self.cursor.execute(
             "EXEC dbo.[get_page_karma_and_votes] @page_id = ?", page_sql_id)
