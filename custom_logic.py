@@ -550,13 +550,16 @@ class SQLConnectorKARMADB:
             return answer
 
     def select_id_characters_total_from_dbo_knownpages(self, platform: str, page_id: str=None, page_title: str=None):
+        logger = logging.getLogger()
         if page_id is not None:
             if platform.lower() == 'xwiki':
                 page_id = 'xwiki:' + page_id
+            logger.debug('page_id: ' + str(page_id) + 'platform: ' + str(platform))
             self.cursor.execute(
                 "select [id],[characters_total] FROM [dbo].[KnownPages] where [page_id] = ? and [platform] LIKE LOWER(?)",
                 page_id, platform)
             raw = self.cursor.fetchone()
+            logger.debug('select [id],[characters_total] FROM [dbo].[KnownPages] where [page_id] result: ' + str(raw))
             if raw:
                 return raw.id, raw.characters_total
             return None
