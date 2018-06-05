@@ -516,7 +516,7 @@ class SQLConnectorKARMADB:
         return None
 
     def select_page_stats(self, xwd_id):
-        result = self.select_id_characters_total_from_dbo_knownpages('xwiki', xwd_id)
+        result = self.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=xwd_id)
         if result is None:
             return None
         page_sql_id = result[0]
