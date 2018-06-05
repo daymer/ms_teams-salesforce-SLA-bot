@@ -561,6 +561,7 @@ class SQLConnectorKARMADB:
             raw = self.cursor.fetchone()
             logger.debug('select [id],[characters_total] FROM [dbo].[KnownPages] where [page_id] result: ' + str(raw))
             if raw:
+                logger.debug('raw.id: ' + str(raw.id) + 'raw.characters_total:' + str(raw.characters_total))
                 return raw.id, raw.characters_total
             return None
         if page_title is not None:
