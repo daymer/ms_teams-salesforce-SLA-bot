@@ -16,6 +16,17 @@ Query_Delay = 60
 
 USE_TEST_VARS = False
 PROCEED_WITH_SLA_RULES = True
+if PROCEED_WITH_SLA_RULES is False:
+    proceed_with_a1_rule = False
+    proceed_with_a2_rule = False
+    proceed_with_a3_rule = False
+    proceed_with_b1_rule = False
+else:
+    proceed_with_a1_rule = True
+    proceed_with_a2_rule = True
+    proceed_with_a3_rule = True
+    proceed_with_b1_rule = True
+
 PROCEED_WITH_KARMA_EVENTS_RULES = True
 #                                                            #
 ##############################################################
@@ -25,7 +36,7 @@ if USE_TEST_VARS is False:
     MainLogger = logging_config(integration_config=configuration_inst, logging_mode='INFO', log_to_file=True,
                                 executable_path=__file__)
 else:
-    MainLogger = logging_config(integration_config=configuration_inst, logging_mode='INFO', log_to_file=False,
+    MainLogger = logging_config(integration_config=configuration_inst, logging_mode='DEBUG', log_to_file=False,
                                 executable_path=__file__)
 
 
@@ -110,21 +121,24 @@ Global_UTC_current_time_hour = datetime.utcnow().hour
 def main_execution(sql_connector_instance_func, teams_channels_inst_func):
     global Global_UTC_current_time_hour
     Global_UTC_current_time_hour = datetime.now().hour
-    if 4 < Global_UTC_current_time_hour < 17 and PROCEED_WITH_SLA_RULES is True:
-        # collect cases to DB from SF
-        proceed_with_a1_rule = True
-        proceed_with_a2_rule = True
-        proceed_with_a3_rule = True
-        # collect cases from Elisa DB
-        proceed_with_b1_rule = True
-
-    else:
-        # don't collect cases to DB from SF
-        proceed_with_a1_rule = False
-        proceed_with_a2_rule = False
-        proceed_with_a3_rule = False
-        # don't collect cases from Elisa DB
-        proceed_with_b1_rule = False
+    c_rule_logic_style = None
+    if PROCEED_WITH_SLA_RULES is True:
+        if 5 <= Global_UTC_current_time_hour < 7:  # t0,  APJ + EMEA
+            c_rule_logic_style = 'APJ + EMEA'
+        elif 7 <= Global_UTC_current_time_hour < 12:  # t1,  EMEA
+            c_rule_logic_style = 'EMEA'
+        elif 12 <= Global_UTC_current_time_hour < 17:  # t2,  EMEA + US
+            c_rule_logic_style = 'EMEA + US'
+        elif 17 <= Global_UTC_current_time_hour < 23:  # t3,  US
+            c_rule_logic_style = 'US'
+        elif 23 <= Global_UTC_current_time_hour < 0:  # t4,  US + APJ
+            c_rule_logic_style = 'US + APJ'
+        elif 0 <= Global_UTC_current_time_hour < 5:  # t5,  APJ
+            c_rule_logic_style = 'APJ'
+        else:
+            c_rule_logic_style = None
+            MainLogger.critical('c_rule_logic_style cannot be None, what time is it?')
+            exit(1)
 
     sf_config_inst_2 = SFConfig()
     s_f_connection = Salesforce(username=sf_config_inst_2.user, password=sf_config_inst_2.password,
@@ -211,7 +225,6 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                     MainLogger.info('Reacting on threat: case ' + str(Threat.info_tuple[2]))
                     Threat.current_SLA = custom_logic.get_current_case_sla(sf_connection=s_f_connection,
                                                                            case_id=Threat.info_tuple[4])
-
                     # Step 1: looking for an appropriate A rule:
                     # A rule is already broken
                     if Threat.current_SLA is None:
@@ -221,24 +234,104 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                         MainLogger.info('Threat neutralized, but not processed: it\'s too late')
                         continue
                     # A rule is not violated, looking for a channel
-                    MainLogger.info('Looking for an appropriate A rule, current case SLA:' + str(Threat.current_SLA))
+                        # Testing CO (Threat.info_tuple[3]) and PCOQ (Threat.info_tuple[11]):
+                    co = custom_logic.sf_get_user_or_group(sf_connection=s_f_connection,
+                                                           user_or_group_id=Threat.info_tuple[3])[0]
+                    if co is None:
+                        exc_tuple = sys.exc_info()
+                        raise custom_logic.SFGetUserNameError('Testing of CO and PCOQ has failed',
+                                                              {'user_or_group_id': Threat.info_tuple[3],
+                                                               'exception': exc_tuple[1]})
+                    PCOQ = Threat.info_tuple[11]
+                    MainLogger.info(
+                        'CO: ' + str(co) + ' with ID: ' + str(Threat.info_tuple[3]) + ', PCOQ: ' + str(PCOQ))
+
+                    MainLogger.info('Looking for an appropriate A rule, current case SLA:' + str(Threat.current_SLA) + ', c_rule_logic_style: ' + str(c_rule_logic_style))
                     Threat.current_SLA = int(Threat.current_SLA)
                     if Threat.current_SLA > rule_a2 and Threat.info_tuple[1]:
-                        # Adding a special forwarding rule A1_1-4 for "Tier 1 - Europe OR Tier Russian OR Tier Portuguese"
-                        # Testing CO and PCOQ:
-                        co = custom_logic.sf_get_user_or_group(sf_connection=s_f_connection,
-                                                               user_or_group_id=Threat.info_tuple[3])[0]
-                        if co is None:
-                            exc_tuple = sys.exc_info()
-                            raise custom_logic.SFGetUserNameError('Testing CO and PCOQ has failed',
-                                                                  {'user_or_group_id': Threat.info_tuple[3],
-                                                                   'exception': exc_tuple[1]})
-                        PCOQ = Threat.info_tuple[11]
-                        MainLogger.info(
-                            'CO:' + str(co) + ' with ID: ' + str(Threat.info_tuple[3]) + ', PCOQ: ' + str(PCOQ))
-                        USE_A1_SHIFT = False
-                        if PCOQ is not None:
-                            if PCOQ in ['Tier 1 - Europe',
+                        if c_rule_logic_style == 'APJ + EMEA':
+                            # Adding a special forwarding rule to notify in a frontier case
+                            # APJ
+                            notify_APJ = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier 2 - EM:Europe',
+                                            'Tier 3 - EM: EMEA']:
+                                    notify_APJ = True
+                            elif co not in ['Tier 1 - Europe',
+                                        'Tier Russian',
+                                        'Tier 2 - EM:Europe',
+                                        'Tier 3 - EM: EMEA']:
+                                notify_APJ = True
+                            # EMEA: NOTE: Threat.target_notification_channel also contains cloud and agent logic
+                            notify_EMEA = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - APAC',
+                                            'Tier Chinese',
+                                            'Tier Japanese']:
+                                    notify_EMEA = True
+                            elif co not in ['Tier 1 - APAC',
+                                            'Tier Chinese',
+                                            'Tier Japanese']:
+                                notify_EMEA = True
+                            if notify_APJ is True:
+                                MainLogger.debug('Sending notification to: Support.Worldwide / APAC - Cases and Calls')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Support.Worldwide / APAC - Cases and Calls'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_EMEA is True:
+                                USE_A1_SHIFT = False
+                                if PCOQ is not None:
+                                    if PCOQ in ['Tier 1 - Europe',
+                                                'Tier Russian',
+                                                'Tier Portuguese',
+                                                'Tier 1 - APAC',
+                                                'Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier Chinese',
+                                                'Tier Dutch',
+                                                'Tier Japanese']:
+                                        USE_A1_SHIFT = True
+                                elif co in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier Portuguese',
+                                            'Tier 1 - APAC',
+                                            'Tier 1 - North America',
+                                            'Tier 1 - South America',
+                                            'Tier 1 - US Federal',
+                                            'Tier Chinese',
+                                            'Tier Dutch',
+                                            'Tier Japanese']:
+                                    USE_A1_SHIFT = True
+                                if USE_A1_SHIFT is True:
+                                    MainLogger.debug(
+                                        'Sending notification to: Case shift 1')
+                                    channel_notification_sequence(
+                                        teams_channels_inst_func.webhooks_dict['Case shift 1'],
+                                        sql_connector_instance_func, Threat)
+                                else:
+                                    MainLogger.debug(
+                                        'Sending notification to: default channel')
+                                    channel_notification_sequence(Threat.target_notification_channel,
+                                                                  sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'EMEA':
+                            # Adding a special forwarding rule A1_1-4 for the list mentioned below
+                            # Testing CO and PCOQ
+                            USE_A1_SHIFT = False
+                            if PCOQ is not None:
+                                if PCOQ in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier Portuguese',
+                                            'Tier 1 - APAC',
+                                            'Tier 1 - North America',
+                                            'Tier 1 - South America',
+                                            'Tier 1 - US Federal',
+                                            'Tier Chinese',
+                                            'Tier Dutch',
+                                            'Tier Japanese']:
+                                    USE_A1_SHIFT = True
+                            elif co in ['Tier 1 - Europe',
                                         'Tier Russian',
                                         'Tier Portuguese',
                                         'Tier 1 - APAC',
@@ -249,79 +342,365 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                                         'Tier Dutch',
                                         'Tier Japanese']:
                                 USE_A1_SHIFT = True
-                        elif co in ['Tier 1 - Europe',
-                                    'Tier Russian',
-                                    'Tier Portuguese',
-                                    'Tier 1 - APAC',
-                                    'Tier 1 - North America',
-                                    'Tier 1 - South America',
-                                    'Tier 1 - US Federal',
-                                    'Tier Chinese',
-                                    'Tier Dutch',
-                                    'Tier Japanese']:
-                            USE_A1_SHIFT = True
-                        if USE_A1_SHIFT is True:
-                            # Testing time:
-                            current_time_hour_utc = datetime.utcnow()
-                            today_shift1_start = current_time_hour_utc.replace(hour=4, minute=30, second=0,
-                                                                               microsecond=0)
-                            today_shift1_end = today_shift1_start.replace(hour=8, minute=30)
-                            today_shift2_start = today_shift1_start.replace(hour=8, minute=30)
-                            today_shift2_end = today_shift1_start.replace(hour=10, minute=30)
-                            today_shift3_start = today_shift1_start.replace(hour=10, minute=30)
-                            today_shift3_end = today_shift1_start.replace(hour=12, minute=30)
-                            today_shift4_start = today_shift1_start.replace(hour=12, minute=30)
-                            today_shift4_end = today_shift1_start.replace(hour=16, minute=30)
+                            if USE_A1_SHIFT is True:
+                                # Testing time:
+                                current_time_hour_utc = datetime.utcnow()
+                                today_shift1_start = current_time_hour_utc.replace(hour=4, minute=30, second=0,
+                                                                                   microsecond=0)
+                                today_shift1_end = today_shift1_start.replace(hour=8, minute=30)
+                                today_shift2_start = today_shift1_start.replace(hour=8, minute=30)
+                                today_shift2_end = today_shift1_start.replace(hour=10, minute=30)
+                                today_shift3_start = today_shift1_start.replace(hour=10, minute=30)
+                                today_shift3_end = today_shift1_start.replace(hour=12, minute=30)
+                                today_shift4_start = today_shift1_start.replace(hour=12, minute=30)
+                                today_shift4_end = today_shift1_start.replace(hour=16, minute=30)
 
-                            if today_shift1_start <= current_time_hour_utc < today_shift1_end:
-                                # 7:30 - 11:30 am GMT+3, 4:30 - 8:30 UTC
-                                Threat.target_notification_channel = teams_channels_inst_func.webhooks_dict['Case shift 1']
-                            elif today_shift2_start <= current_time_hour_utc < today_shift2_end:
-                                # 11:30am - 1:30pm GMT+3, 8:30 - 10:30 UTC
-                                Threat.target_notification_channel = teams_channels_inst_func.webhooks_dict['Case shift 2']
-                            elif today_shift3_start <= current_time_hour_utc < today_shift3_end:
-                                # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30 UTC
-                                Threat.target_notification_channel = teams_channels_inst_func.webhooks_dict['Case shift 3']
-                            elif today_shift4_start <= current_time_hour_utc < today_shift4_end:
-                                # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30 UTC
-                                Threat.target_notification_channel = teams_channels_inst_func.webhooks_dict['Case shift 4']
+                                if today_shift1_start <= current_time_hour_utc < today_shift1_end:
+                                    # 7:30 - 11:30 am GMT+3, 4:30 - 8:30 UTC
+                                    RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                        'Case shift 1']
+                                    MainLogger.debug(
+                                        'Sending notification to: Case shift 1')
+                                elif today_shift2_start <= current_time_hour_utc < today_shift2_end:
+                                    # 11:30am - 1:30pm GMT+3, 8:30 - 10:30 UTC
+                                    RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                        'Case shift 2']
+                                    MainLogger.debug(
+                                        'Sending notification to: Case shift 2')
+                                elif today_shift3_start <= current_time_hour_utc < today_shift3_end:
+                                    # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30 UTC
+                                    RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                        'Case shift 3']
+                                    MainLogger.debug(
+                                        'Sending notification to: Case shift 3')
+                                elif today_shift4_start <= current_time_hour_utc < today_shift4_end:
+                                    # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30 UTC
+                                    RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                        'Case shift 4']
+                                    MainLogger.debug(
+                                        'Sending notification to: Case shift 4')
+                                else:
+                                    MainLogger.info(
+                                        'A1_n rule by source is ok, but now is not a right time, notifying a default channel by type: ' + str(
+                                            Threat.target_notification_channel))
+                                    RuleA1_notification_target_channel = Threat.target_notification_channel
+                                channel_notification_sequence(RuleA1_notification_target_channel,
+                                                              sql_connector_instance_func, Threat)
                             else:
-                                MainLogger.info(
-                                    'A1_n rule by source is ok, but now is not a right time, notifying a previously selected channel: ' + str(
-                                        Threat.target_notification_channel))
+                                # it means that it's a special or language channel and a default target_notification_channel should be used
+                                MainLogger.debug(
+                                    'Sending notification to: default channel')
+                                channel_notification_sequence(Threat.target_notification_channel,
+                                                              sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'EMEA + US':
+                            # EMEA:
+                            notify_EMEA = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier 2 - EM:Americas',
+                                                'Tier 3 - EM:Americas']:
+                                    notify_EMEA = True
+                            elif co not in ['Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier 2 - EM:Americas',
+                                                'Tier 3 - EM:Americas']:
+                                notify_EMEA = True
+                            # US
+                            notify_US = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - Europe',
+                                                'Tier Russian',
+                                                'Tier 2 - EM:Europe',
+                                                'Tier 3 - EM: EMEA']:
+                                    notify_US = True
+                            elif co not in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier 2 - EM:Europe',
+                                            'Tier 3 - EM: EMEA']:
+                                notify_US = True
+                            if notify_US is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / NA - Cases')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / NA - Cases'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_EMEA is True:
                                 USE_A1_SHIFT = False
+                                if PCOQ is not None:
+                                    if PCOQ in ['Tier 1 - Europe',
+                                                'Tier Russian',
+                                                'Tier Portuguese',
+                                                'Tier 1 - APAC',
+                                                'Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier Chinese',
+                                                'Tier Dutch',
+                                                'Tier Japanese']:
+                                        USE_A1_SHIFT = True
+                                elif co in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier Portuguese',
+                                            'Tier 1 - APAC',
+                                            'Tier 1 - North America',
+                                            'Tier 1 - South America',
+                                            'Tier 1 - US Federal',
+                                            'Tier Chinese',
+                                            'Tier Dutch',
+                                            'Tier Japanese']:
+                                    USE_A1_SHIFT = True
+                                if USE_A1_SHIFT is True:
+                                    # Testing time:
+                                    current_time_hour_utc = datetime.utcnow()
+                                    today_shift1_start = current_time_hour_utc.replace(hour=4, minute=30, second=0,
+                                                                                       microsecond=0)
+                                    today_shift1_end = today_shift1_start.replace(hour=8, minute=30)
+                                    today_shift2_start = today_shift1_start.replace(hour=8, minute=30)
+                                    today_shift2_end = today_shift1_start.replace(hour=10, minute=30)
+                                    today_shift3_start = today_shift1_start.replace(hour=10, minute=30)
+                                    today_shift3_end = today_shift1_start.replace(hour=12, minute=30)
+                                    today_shift4_start = today_shift1_start.replace(hour=12, minute=30)
+                                    today_shift4_end = today_shift1_start.replace(hour=16, minute=30)
+                                    if today_shift1_start <= current_time_hour_utc < today_shift1_end:
+                                        # 7:30 - 11:30 am GMT+3, 4:30 - 8:30 UTC
+                                        RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                            'Case shift 1']
+                                        MainLogger.debug(
+                                            'Sending notification to: Case shift 1')
+                                    elif today_shift2_start <= current_time_hour_utc < today_shift2_end:
+                                        # 11:30am - 1:30pm GMT+3, 8:30 - 10:30 UTC
+                                        RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                            'Case shift 2']
+                                        MainLogger.debug(
+                                            'Sending notification to: Case shift 2')
+                                    elif today_shift3_start <= current_time_hour_utc < today_shift3_end:
+                                        # 1:30pm - 3:30pm GMT+3, 10:30 - 12:30 UTC
+                                        RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                            'Case shift 3']
+                                        MainLogger.debug(
+                                            'Sending notification to: Case shift 3')
+                                    elif today_shift4_start <= current_time_hour_utc < today_shift4_end:
+                                        # 3:30pm - 7:30pm GMT+3, 12:30 - 16:30 UTC
+                                        RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict[
+                                            'Case shift 4']
+                                        MainLogger.debug(
+                                            'Sending notification to: Case shift 4')
+                                    else:
+                                        MainLogger.info(
+                                            'A1_n rule by source is ok, but now is not a right time, notifying a default channel by type: ' + str(
+                                                Threat.target_notification_channel))
+                                        RuleA1_notification_target_channel = Threat.target_notification_channel
+                                    channel_notification_sequence(RuleA1_notification_target_channel,
+                                                                  sql_connector_instance_func, Threat)
+                                else:
+                                    # it means that it's a special or language channel and a default target_notification_channel should be used
+                                    MainLogger.debug(
+                                        'Sending notification to: default channel')
+                                    channel_notification_sequence(Threat.target_notification_channel,
+                                                                  sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'US':
+                            MainLogger.debug(
+                                'Sending notification to: Support.Worldwide / NA - Cases')
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Support.Worldwide / NA - Cases'],
+                                                          sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'US + APJ':
+                            # Adding a special forwarding rule to notify in a frontier case
+                            notify_US = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - APAC',
+                                                'Tier Chinese',
+                                                'Tier Japanese']:
+                                    notify_US = True
+                            elif co not in ['Tier 1 - APAC',
+                                                'Tier Chinese',
+                                                'Tier Japanese']:
+                                notify_US = True
+                            notify_APJ = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier 2 - EM:Americas',
+                                                'Tier 3 - EM:Americas']:
+                                    notify_APJ = True
+                            elif co not in ['Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier 2 - EM:Americas',
+                                                'Tier 3 - EM:Americas']:
+                                notify_APJ = True
+                            if notify_US is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / NA - Cases')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / NA - Cases'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_APJ is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / APAC - Cases and Calls')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / APAC - Cases and Calls'],
+                                                              sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'APJ':
+                            MainLogger.debug(
+                                'Sending notification to: Support.Worldwide / APAC - Cases and Calls')
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Support.Worldwide / APAC - Cases and Calls'],
+                                                          sql_connector_instance_func, Threat)
                         else:
-                            MainLogger.info(
-                                'A1 rule, notifying a previously selected channel: ' + str(
-                                    Threat.target_notification_channel))
-                        if USE_A1_SHIFT is True:
-                            MainLogger.info(
-                                'A1_n rule, notifying a new selected Case Shift channel: ' + str(
-                                    Threat.target_notification_channel))
-                        result = custom_logic.send_notification_to_web_hook(
-                            web_hook_url=Threat.target_notification_channel,
-                            threat=Threat)
+                            MainLogger.critial(
+                                'Failed to locate an appropriate channel to notify about A1 rule event, using "Test channel"')
+                            RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict['Test channel']
+                            channel_notification_sequence(RuleA1_notification_target_channel,
+                                                          sql_connector_instance_func, Threat)
                     elif rule_a2 >= Threat.current_SLA > rule_a3:
-                        RuleA2_notification_target_channel = teams_channels_inst_func.webhooks_dict['Tier 1 EMEA > General']
-                        result = custom_logic.send_notification_to_web_hook(
-                            web_hook_url=RuleA2_notification_target_channel,
-                            threat=Threat)
+                        if c_rule_logic_style == 'APJ + EMEA':
+                            # Adding a special forwarding rule to notify in a frontier case
+                            # APJ
+                            notify_APJ = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - Europe',
+                                                'Tier Russian',
+                                                'Tier 2 - EM:Europe',
+                                                'Tier 3 - EM: EMEA']:
+                                    notify_APJ = True
+                            elif co not in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier 2 - EM:Europe',
+                                            'Tier 3 - EM: EMEA']:
+                                notify_APJ = True
+                            # EMEA: NOTE: Threat.target_notification_channel also contains cloud and agent logic
+                            notify_EMEA = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - APAC',
+                                                'Tier Chinese',
+                                                'Tier Portuguese',
+                                                'Tier Japanese']:
+                                    notify_EMEA = True
+                            elif co not in ['Tier 1 - APAC',
+                                            'Tier Chinese',
+                                            'Tier Portuguese',
+                                            'Tier Japanese']:
+                                notify_EMEA = True
+                            if notify_APJ is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / APAC - Cases and Calls')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / APAC - Cases and Calls'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_EMEA is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Tier 1 EMEA / Administrative')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Tier 1 EMEA / Administrative'],
+                                                              sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'EMEA':
+                            MainLogger.debug(
+                                'Sending notification to: Tier 1 EMEA / Administrative')
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                              'Tier 1 EMEA / Administrative'],
+                                                          sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'EMEA + US':
+                            # US
+                            notify_US = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - Europe',
+                                                'Tier Russian',
+                                                'Tier 2 - EM:Europe',
+                                                'Tier 3 - EM: EMEA']:
+                                    notify_US = True
+                            elif co not in ['Tier 1 - Europe',
+                                            'Tier Russian',
+                                            'Tier 2 - EM:Europe',
+                                            'Tier 3 - EM: EMEA']:
+                                notify_US = True
+                            # EMEA:
+                            notify_EMEA = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - APAC',
+                                                'Tier Chinese',
+                                                'Tier Japanese']:
+                                    notify_EMEA = True
+                            elif co not in ['Tier 1 - APAC',
+                                            'Tier Chinese',
+                                            'Tier Portuguese',
+                                            'Tier Japanese']:
+                                notify_EMEA = True
+                            if notify_US is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / NA - Cases')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / NA - Cases'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_EMEA is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Tier 1 EMEA / Administrative')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Tier 1 EMEA / Administrative'],
+                                                              sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'US':
+                            MainLogger.debug(
+                                'Sending notification to: Support.Worldwide / NA - Cases')
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                              'Support.Worldwide / NA - Cases'],
+                                                          sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'US + APJ':
+                            notify_US = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - APAC',
+                                                'Tier Chinese',
+                                                'Tier Japanese']:
+                                    notify_US = True
+                            elif co not in ['Tier 1 - APAC',
+                                            'Tier Chinese',
+                                            'Tier Japanese']:
+                                notify_US = True
+                            notify_APJ = False
+                            if PCOQ is not None:
+                                if PCOQ not in ['Tier 1 - North America',
+                                                'Tier 1 - South America',
+                                                'Tier 1 - US Federal',
+                                                'Tier 2 - EM:Americas',
+                                                'Tier 3 - EM:Americas']:
+                                    notify_APJ = True
+                            elif co not in ['Tier 1 - North America',
+                                            'Tier 1 - South America',
+                                            'Tier 1 - US Federal',
+                                            'Tier 2 - EM:Americas',
+                                            'Tier 3 - EM:Americas']:
+                                notify_APJ = True
+                            if notify_US is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / NA - Cases')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / NA - Cases'],
+                                                              sql_connector_instance_func, Threat)
+                            if notify_APJ is True:
+                                MainLogger.debug(
+                                    'Sending notification to: Support.Worldwide / APAC - Cases and Calls')
+                                channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                                  'Support.Worldwide / APAC - Cases and Calls'],
+                                                              sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'APJ':
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                              'Support.Worldwide / APAC - Cases and Calls'],
+                                                          sql_connector_instance_func, Threat)
+                        else:
+                            MainLogger.critial(
+                                'Failed to locate an appropriate channel to notify about A2 rule event, using "Test channel"')
+                            channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
+                                                              'Test channel'],
+                                                          sql_connector_instance_func, Threat)
                     elif Threat.current_SLA <= rule_a3:
-                        RuleA3_notification_target_channel = teams_channels_inst_func.webhooks_dict['Tier 1 TL']
-                        result = custom_logic.send_notification_to_web_hook(
-                            web_hook_url=RuleA3_notification_target_channel,
-                            threat=Threat)
+                        MainLogger.debug(
+                            'Sending notification to: Support.Worldwide / Management.Worldwide / General')
+                        channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Management.Worldwide / General'], sql_connector_instance_func, Threat)
                     else:
-                        result = False
-                    if result is not True:
-                        MainLogger.error('Failed to send notification to ' + str(Threat.target_notification_channel))
-                    else:
-                        result = sql_connector_instance_func.update_dbo_cases_after_notification_sent(
-                            row_id=Threat.info_tuple[1])
-                        if result is not True:
-                            MainLogger.critical('Failed to update DB around row:' + str(Threat.info_tuple[1]))
-                        elif result is True:
-                            MainLogger.info('Threat neutralized and processed')
+                        MainLogger.critial(
+                            'Cannot apply any A rule for the case, skipping')
+                        continue
                 else:
                     pass
             if isinstance(Threat, custom_logic.KarmaEvent):
@@ -357,6 +736,26 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
     other_time.sleep(Query_Delay)
 
 
+def channel_notification_sequence(target_notification_channel, sql_connector_instance_func, threat):
+    logger_inst = logging.getLogger()
+    result = custom_logic.send_notification_to_web_hook(
+        web_hook_url=target_notification_channel,
+        threat=threat)
+    if result is not True:
+        logger_inst.error(
+            'Failed to send notification to ' + str(target_notification_channel))
+        return False
+    else:
+        result = sql_connector_instance_func.update_dbo_cases_after_notification_sent(
+            row_id=threat.info_tuple[1])
+        if result is not True:
+            logger_inst.critical('Failed to update DB around row:' + str(threat.info_tuple[1]))
+            return False
+        elif result is True:
+            logger_inst.info('Threat neutralized and processed, '+str(target_notification_channel) + ' was notified')
+            return True
+
+
 try:
     while True:
         main_execution(sql_connector_instance_func=sql_connector_instance_elisa_db, teams_channels_inst_func=teams_channels_inst)
@@ -365,3 +764,5 @@ except simple_salesforce.exceptions.SalesforceExpiredSession:
     sf_config_inst = SFConfig()
     SF_connection = Salesforce(username=sf_config_inst.user, password=sf_config_inst.password,
                                security_token=sf_config_inst.token)
+
+

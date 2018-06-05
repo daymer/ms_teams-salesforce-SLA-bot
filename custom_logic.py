@@ -76,7 +76,6 @@ def sf_get_user_or_group(sf_connection: Salesforce, user_or_group_id: str)->tupl
 
 def find_target_teams_channel_for_case_sla(current_case_owner_id: str, previous_case_owner_id: str, product: str, teams_channels_inst: configuration.TeamsChannels)-> str:
     main_logger = logging.getLogger()
-    main_logger.debug('find_target_teams_channel_for_case_sla ' + str(teams_channels_inst.is_test))
     target_teams_channel = 'undefined'
     # supported_source_pretty_name = None
     logger_inst = logging.getLogger()
@@ -99,14 +98,14 @@ def find_target_teams_channel_for_case_sla(current_case_owner_id: str, previous_
             pass
         except KeyError:
             supported_source_pretty_name = None
-            logger_inst.debug('Cannot find a target channel to notify about current_case_owner_id:' + str(current_case_owner_id) + ' and Previous_Owner_Queue__c:' + str(previous_case_owner_id))
+            logger_inst.error('Cannot find a target channel to notify about current_case_owner_id:' + str(current_case_owner_id) + ' and Previous_Owner_Queue__c:' + str(previous_case_owner_id))
     if supported_source_pretty_name is not None:
         try:
             target_teams_channel = teams_channels_inst.webhooks_dict[supported_source_pretty_name]
         except KeyError:
-            logger_inst.debug('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
+            logger_inst.error('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
         except Exception:
-            logger_inst.debug('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
+            logger_inst.error('Cannot find a target channel to notify about ' + str(supported_source_pretty_name))
 
     return target_teams_channel
 
@@ -353,10 +352,10 @@ class SQLConnectorELISADB:
             return None
 
 
-
 def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
     logger_inst = logging.getLogger()
-    logger_inst.debug(web_hook_url)
+    logger_inst.debug('web_hook_url: ' + str(web_hook_url))
+    logger_inst.debug('threat: ' + str(threat))
     if uri_validator(web_hook_url) is not True:
         logger_inst.error('Malformed url: ' + str(web_hook_url))
         return False
@@ -379,8 +378,10 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             return result
         elif threat.event_type == 'vote':
             page_name = sql_connector_instance_karma_db.select_page_title_by_page_id(str(threat.info_tuple[5]))
+            logger_inst.debug('page_name: ' + str(page_name))
             page_stats = sql_connector_instance_karma_db.select_page_stats(xwd_id=str(threat.info_tuple[5]))
-            pretty_name  = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
+            logger_inst.debug('page_stats: ' + str(page_stats))
+            pretty_name = threat.info_tuple[6][:1].capitalize() + '. ' + threat.info_tuple[6][1:2].capitalize() + threat.info_tuple[6][2:]
             if threat.info_tuple[7] == 1:
                 text = '**Voted UP** **"' + page_name + '"** by ' + pretty_name + '\n\n'
             else:
@@ -396,6 +397,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
             text = text[:-1] + ';'
             text += ' Karma score: ' + str(page_stats['page_karma_score'])
             team_connection.color('5DADE2')
+            logger_inst.debug('text: ' + str(text))
             team_connection.text(text)
             team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
             result = team_connection.send()
