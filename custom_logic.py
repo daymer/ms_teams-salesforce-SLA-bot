@@ -521,7 +521,7 @@ class SQLConnectorKARMADB:
             return None
         page_sql_id = result[0]
         total_characters_of_requested_page = int(result[1])
-        if total_characters_of_requested_page < 100:
+        if total_characters_of_requested_page < 1:
             return None
         self.cursor.execute(
             "EXEC dbo.[get_page_karma_and_votes] @page_id = ?", page_sql_id)
