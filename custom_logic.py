@@ -457,7 +457,6 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                     logger_inst.info(
                         'Page has less than 100 characters, no need to notify about it, page_id:' + str(threat.info_tuple[5]))
                     return True
-
             else:
                 logger_inst.critical('Unable to get page_title by the provided page_id:' + str(threat.info_tuple[5]))
                 logger_inst.critical('Aborting message send operation for '+str(threat.info_tuple[1]))

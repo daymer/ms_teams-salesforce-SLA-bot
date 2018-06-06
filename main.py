@@ -33,7 +33,7 @@ PROCEED_WITH_KARMA_EVENTS_RULES = True
 
 configuration_inst = Integration()
 if USE_TEST_VARS is False:
-    MainLogger = logging_config(integration_config=configuration_inst, logging_mode='INFO', log_to_file=True,
+    MainLogger = logging_config(integration_config=configuration_inst, logging_mode='DEBUG', log_to_file=True,
                                 executable_path=__file__)
 else:
     MainLogger = logging_config(integration_config=configuration_inst, logging_mode='DEBUG', log_to_file=False,
@@ -721,7 +721,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                         if result is not True:
                             MainLogger.critical('Failed to update DB around row:' + str(Threat.info_tuple[1]))
                         elif result is True:
-                            MainLogger.info('Threat neutralized and processed')
+                            MainLogger.info('Threat ' + str(Threat.info_tuple[2]) + ' of ' + str(Threat.info_tuple[5]) + ' was neutralized and processed')
                 else:
                     # The same event was already fired, no need to repeat
                     result = sql_connector_instance_func.update_dbo_karma_events_after_notification_sent(
