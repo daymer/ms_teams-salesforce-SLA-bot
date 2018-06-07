@@ -6,7 +6,7 @@ from datetime import datetime
 from configuration import Integration
 
 
-def logging_config(integration_config: Integration, logging_mode: str= 'INFO', log_to_file: bool=False, executable_path:str = __file__) -> object:
+def logging_config(integration_config: Integration, logging_mode: str= 'INFO', log_to_file: bool=False, executable_path:str = __file__) -> logging:
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     logger_inst = logging.getLogger()
     logger_inst.setLevel(logging_mode)

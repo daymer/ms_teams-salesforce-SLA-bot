@@ -131,7 +131,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
             c_rule_logic_style = 'EMEA + US'
         elif 17 <= Global_UTC_current_time_hour < 23:  # t3,  US
             c_rule_logic_style = 'US'
-        elif 23 <= Global_UTC_current_time_hour < 0:  # t4,  US + APJ
+        elif 23 <= Global_UTC_current_time_hour:  # t4,  US + APJ
             c_rule_logic_style = 'US + APJ'
         elif 0 <= Global_UTC_current_time_hour < 5:  # t5,  APJ
             c_rule_logic_style = 'APJ'
