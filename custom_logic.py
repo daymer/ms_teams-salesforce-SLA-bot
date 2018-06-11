@@ -362,7 +362,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
     team_connection = pymsteams.connectorcard(web_hook_url)
     if isinstance(threat, CaseSLA):
         team_connection.text("**Case 0" + str(threat.info_tuple[2]) + "** has **<" + str(threat.current_SLA) + "** minutes left before the target response time")
-        team_connection.addLinkButton("Open case", "https://na62.salesforce.com/" + str(threat.info_tuple[4]))
+        team_connection.addLinkButton("Open case", "https://veeam.my.salesforce.com/" + str(threat.info_tuple[4]))
         #team_connection.entities(type='mention', id='ba07baab-431b-49ed-add7-cbc3542f5140', name='Test channel')
         team_connection.color('red')
         result = team_connection.send()
