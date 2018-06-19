@@ -114,32 +114,49 @@ def a_karma_event_rule(sql_connector_instance_karma_db_func: custom_logic.SQLCon
                 exit(1)
 
 
-Global_UTC_current_time_hour = datetime.utcnow().hour
-#        other_time.sleep(Query_Delay)
-
-
 def main_execution(sql_connector_instance_func, teams_channels_inst_func):
-    global Global_UTC_current_time_hour
-    Global_UTC_current_time_hour = datetime.now().hour
     c_rule_logic_style = None
     if PROCEED_WITH_SLA_RULES is True:
-        if 5 <= Global_UTC_current_time_hour < 7:  # t0,  APJ + EMEA
-            c_rule_logic_style = 'APJ + EMEA'
-        elif 7 <= Global_UTC_current_time_hour < 12:  # t1,  EMEA
-            c_rule_logic_style = 'EMEA'
-        elif 12 <= Global_UTC_current_time_hour < 17:  # t2,  EMEA + US
-            c_rule_logic_style = 'EMEA + US'
-        elif 17 <= Global_UTC_current_time_hour < 23:  # t3,  US
-            c_rule_logic_style = 'US'
-        elif 23 <= Global_UTC_current_time_hour:  # t4,  US + APJ
-            c_rule_logic_style = 'US + APJ'
-        elif 0 <= Global_UTC_current_time_hour < 5:  # t5,  APJ
-            c_rule_logic_style = 'APJ'
+        current_day_of_week = datetime.utcnow().date().weekday()
+        if current_day_of_week in (5, 6):  # weekend shifts
+            utc_current_date = datetime.utcnow().date()
+            utc_11_march = datetime.utcnow().date().replace(month=3, day=11)
+            utc_04_november = datetime.utcnow().date().replace(month=11, day=4)
+            utc_current_time = datetime.utcnow()
+            if utc_04_november <= utc_current_date < utc_11_march:
+                MainLogger.debug('Checking time, now is after 04.11 and before 11.03, dls = winter')
+                weekend_emea_shift_start = utc_current_time.replace(hour=4, minute=30)
+                weekend_emea_shift_end = utc_current_time.replace(hour=16, minute=30)
+            elif utc_11_march <= utc_current_date < utc_04_november:
+                MainLogger.debug('Checking time, now is after 11.03 and before 04.11, dls = summer')
+                weekend_emea_shift_start = utc_current_time.replace(hour=5, minute=00)
+                weekend_emea_shift_end = utc_current_time.replace(hour=17, minute=00)
+            else:
+                #  just in case...
+                weekend_emea_shift_start = utc_current_time.replace(hour=5, minute=00)
+                weekend_emea_shift_end = utc_current_time.replace(hour=17, minute=00)
+            if weekend_emea_shift_start <= utc_current_time < weekend_emea_shift_end:
+                c_rule_logic_style = 'Weekend EMEA'
+            else:
+                c_rule_logic_style = 'Weekend US'
         else:
-            c_rule_logic_style = None
-            MainLogger.critical('c_rule_logic_style cannot be None, what time is it?')
-            exit(1)
-
+            utc_current_time_hour = datetime.utcnow().hour
+            if 5 <= utc_current_time_hour < 7:  # t0,  APJ + EMEA
+                c_rule_logic_style = 'APJ + EMEA'
+            elif 7 <= utc_current_time_hour < 12:  # t1,  EMEA
+                c_rule_logic_style = 'EMEA'
+            elif 12 <= utc_current_time_hour < 17:  # t2,  EMEA + US
+                c_rule_logic_style = 'EMEA + US'
+            elif 17 <= utc_current_time_hour < 23:  # t3,  US
+                c_rule_logic_style = 'US'
+            elif 23 <= utc_current_time_hour:  # t4,  US + APJ
+                c_rule_logic_style = 'US + APJ'
+            elif 0 <= utc_current_time_hour < 5:  # t5,  APJ
+                c_rule_logic_style = 'APJ'
+            else:
+                c_rule_logic_style = None
+                MainLogger.critical('c_rule_logic_style cannot be None, what time is it?')
+                exit(1)
     sf_config_inst_2 = SFConfig()
     s_f_connection = Salesforce(username=sf_config_inst_2.user, password=sf_config_inst_2.password,
                                 security_token=sf_config_inst_2.token)
@@ -248,7 +265,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
 
                     MainLogger.info('Looking for an appropriate A rule, current case SLA:' + str(Threat.current_SLA) + ', c_rule_logic_style: ' + str(c_rule_logic_style))
                     Threat.current_SLA = int(Threat.current_SLA)
-                    if Threat.current_SLA > rule_a2 and Threat.info_tuple[1]:
+                    if Threat.current_SLA > rule_a2 and Threat.info_tuple[1]:  # A1
                         if c_rule_logic_style == 'APJ + EMEA':
                             # Adding a special forwarding rule to notify in a frontier case
                             # APJ
@@ -549,13 +566,25 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                                 'Sending notification to: Support.Worldwide / APAC - Cases and Calls')
                             channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Support.Worldwide / APAC - Cases and Calls'],
                                                           sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'Weekend EMEA':
+                            MainLogger.debug(
+                                'Sending notification to: Tier1 EMEA / Weekend channel')
+                            channel_notification_sequence(
+                                teams_channels_inst_func.webhooks_dict['Tier1 EMEA / Weekend channel'],
+                                sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'Weekend US':
+                            MainLogger.debug(
+                                'Sending notification to: Support.Worldwide / NA - Cases')
+                            channel_notification_sequence(
+                                teams_channels_inst_func.webhooks_dict['Support.Worldwide / NA - Cases'],
+                                sql_connector_instance_func, Threat)
                         else:
                             MainLogger.critial(
                                 'Failed to locate an appropriate channel to notify about A1 rule event, using "Test channel"')
                             RuleA1_notification_target_channel = teams_channels_inst_func.webhooks_dict['Test channel']
                             channel_notification_sequence(RuleA1_notification_target_channel,
                                                           sql_connector_instance_func, Threat)
-                    elif rule_a2 >= Threat.current_SLA > rule_a3:
+                    elif rule_a2 >= Threat.current_SLA > rule_a3:  # A2
                         if c_rule_logic_style == 'APJ + EMEA':
                             # Adding a special forwarding rule to notify in a frontier case
                             # APJ
@@ -687,6 +716,12 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                             channel_notification_sequence(teams_channels_inst_func.webhooks_dict[
                                                               'Support.Worldwide / APAC - Cases and Calls'],
                                                           sql_connector_instance_func, Threat)
+                        elif c_rule_logic_style == 'Weekend EMEA' or c_rule_logic_style == 'Weekend US':
+                            MainLogger.debug(
+                                'Sending notification to: Support.Worldwide / Weekend Cases')
+                            channel_notification_sequence(
+                                teams_channels_inst_func.webhooks_dict['Support.Worldwide / Weekend Cases'],
+                                sql_connector_instance_func, Threat)
                         else:
                             MainLogger.critial(
                                 'Failed to locate an appropriate channel to notify about A2 rule event, using "Test channel"')
@@ -695,7 +730,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                                                           sql_connector_instance_func, Threat)
                     elif Threat.current_SLA <= rule_a3:
                         MainLogger.debug(
-                            'Sending notification to: Support.Worldwide / Management.Worldwide / General')
+                            'Sending notification to: Management.Worldwide / General')
                         channel_notification_sequence(teams_channels_inst_func.webhooks_dict['Management.Worldwide / General'], sql_connector_instance_func, Threat)
                     else:
                         MainLogger.critial(
