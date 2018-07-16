@@ -119,7 +119,7 @@ def find_target_teams_channel_for_karma_event(event_type: str, teams_channels_in
         target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
     elif event_type == 'reindex':
         if event_dict['full'] is True:
-            target_teams_channel = teams_channels_inst.webhooks_dict['Support Worldwide / General']
+            target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
         else:
             target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
     elif event_type == 'vote':
