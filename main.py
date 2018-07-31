@@ -752,18 +752,19 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                     existence = False
                 if existence is False:
                     # checking if it's a VCC bug and we need to notify 2 channels at once:
-                    if str(Threat.info_tuple[5]).lower().startswith('main.bugs and fixes.found bugs.vbr.bug'):
-                        MainLogger.debug('It\'s a VCC bug and we need to notify 2 channels at once')
-                        karma_page_id, chars_total = sql_connector_instance_karma_db.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=Threat.info_tuple[5])
-                        bug_components_array = sql_connector_instance_karma_db.select_bug_components_from_dbo_knownbugs(page_id=karma_page_id)
-                        if 'CloudConnect' in bug_components_array:
-                            MainLogger.debug('It\'s a VCC bug, notifying an extra channel')
-                            result = custom_logic.send_notification_to_web_hook(
-                                web_hook_url=teams_channels_inst_func.webhooks_dict['WWW VCC'],
-                                threat=Threat)
-                            if result is not True:
-                                MainLogger.error(
-                                    'Failed to send notification to ' + str(Threat.target_notification_channel))
+                    if Threat.info_tuple[8] is True:  # notify only on full
+                        if str(Threat.info_tuple[5]).lower().startswith('main.bugs and fixes.found bugs.vbr.bug'):
+                            MainLogger.debug('It\'s a VCC bug and we need to notify 2 channels at once')
+                            karma_page_id, chars_total = sql_connector_instance_karma_db.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=Threat.info_tuple[5])
+                            bug_components_array = sql_connector_instance_karma_db.select_bug_components_from_dbo_knownbugs(page_id=karma_page_id)
+                            if 'CloudConnect' in bug_components_array:
+                                MainLogger.debug('It\'s a VCC bug, notifying an extra channel')
+                                result = custom_logic.send_notification_to_web_hook(
+                                    web_hook_url=teams_channels_inst_func.webhooks_dict['WWW VCC'],
+                                    threat=Threat)
+                                if result is not True:
+                                    MainLogger.error(
+                                        'Failed to send notification to ' + str(Threat.target_notification_channel))
                     result = custom_logic.send_notification_to_web_hook(
                         web_hook_url=Threat.target_notification_channel,
                         threat=Threat)
