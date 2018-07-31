@@ -559,14 +559,14 @@ class SQLConnectorKARMADB:
         if page_id is not None:
             if platform.lower() == 'xwiki':
                 page_id = 'xwiki:' + page_id
-            logger.debug('page_id: ' + str(page_id) + 'platform: ' + str(platform))
+            logger.debug('page_id: ' + str(page_id) + ' platform: ' + str(platform))
             self.cursor.execute(
                 "select [id],[characters_total] FROM [dbo].[KnownPages] where [page_id] = ? and [platform] LIKE LOWER(?)",
                 page_id, platform)
             raw = self.cursor.fetchone()
             logger.debug('select [id],[characters_total] FROM [dbo].[KnownPages] where [page_id] result: ' + str(raw))
             if raw:
-                logger.debug('raw.id: ' + str(raw.id) + 'raw.characters_total:' + str(raw.characters_total))
+                logger.debug('raw.id: ' + str(raw.id) + ' raw.characters_total:' + str(raw.characters_total))
                 return raw.id, raw.characters_total
             return None
         if page_title is not None:
