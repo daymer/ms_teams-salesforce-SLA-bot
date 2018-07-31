@@ -388,7 +388,6 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                 else:
                     text = '**Voted DOWN** **"' + page_name + '"** by ' + pretty_name + '\n\n'
                 text += make_top_contributors_text(page_stats=page_stats)
-                text += ' Karma score: ' + str(page_stats['page_karma_score'])
                 team_connection.color('5DADE2')
                 logger_inst.debug('text: ' + str(text))
                 team_connection.text(text)
@@ -430,7 +429,6 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                             xwiki_part = 'Administrative'
                         text = 'A **new** article **"' + page_name + '"** was added into the **' + xwiki_part + '** part of the xWiki!\n\n'
                         text += make_top_contributors_text(page_stats=page_stats)
-                        text += ' Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('C39BD3')
                     team_connection.text(text)
                     team_connection.addLinkButton("Go to the article", str(threat.info_tuple[4]))
@@ -468,6 +466,8 @@ def make_top_contributors_text(page_stats: dict):
                 pretty_name = 'Support AI'
             text += ' ' + pretty_name + ' (' + str(value) + '%),'
         text = text[:-1] + ';'
+        text += ' Karma score: ' + str(page_stats['page_karma_score'])
+        # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
         return text
 
 
