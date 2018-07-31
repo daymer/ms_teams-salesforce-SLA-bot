@@ -48,7 +48,7 @@ def initialize(sf_config_ins_func: SFConfig):
     except simple_salesforce.exceptions.SalesforceAuthenticationFailed as error:
         logger_inst.error('Failed to connect to SalesForce due to the following error:\n' + str(error))
         sf_connection = None
-    return logger_inst, sf_connection
+    return sf_connection
 
 
 sf_config_instance = SFConfig()
@@ -91,6 +91,12 @@ def a_rule(rule_start: int, rule_end: int, sf_connection: Salesforce, teams_chan
             if isinstance(main_logger.root.handlers[0], logging.FileHandler):
                 main_logger.error('Log name: ' + main_logger.root.handlers[0].baseFilename)
                 exit(1)
+
+
+def a_backlog_rule(sf_connection: Salesforce, teams_channels_inst: TeamsChannels, team: str):
+    main_logger = logging.getLogger()
+    main_logger.info(
+        'A backlog: Checking if there is any backlog for team: ' + str(team))
 
 
 def a_karma_event_rule(sql_connector_instance_karma_db_func: custom_logic.SQLConnectorKARMADB, event_type: str):
@@ -745,6 +751,19 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                 else:
                     existence = False
                 if existence is False:
+                    # checking if it's a VCC bug and we need to notify 2 channels at once:
+                    if str(Threat.info_tuple[5]).lower().startswith('main.bugs and fixes.found bugs.vbr.bug'):
+                        MainLogger.debug('It\'s a VCC bug and we need to notify 2 channels at once')
+                        karma_page_id, chars_total = sql_connector_instance_karma_db.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=Threat.info_tuple[5])
+                        bug_components_array = sql_connector_instance_karma_db.select_bug_components_from_dbo_knownbugs(page_id=karma_page_id)
+                        if 'CloudConnect' in bug_components_array:
+                            MainLogger.debug('It\'s a VCC bug, notifying an extra channel')
+                            result = custom_logic.send_notification_to_web_hook(
+                                web_hook_url=teams_channels_inst_func.webhooks_dict['WWW VCC'],
+                                threat=Threat)
+                            if result is not True:
+                                MainLogger.error(
+                                    'Failed to send notification to ' + str(Threat.target_notification_channel))
                     result = custom_logic.send_notification_to_web_hook(
                         web_hook_url=Threat.target_notification_channel,
                         threat=Threat)

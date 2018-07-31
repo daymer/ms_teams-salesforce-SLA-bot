@@ -579,6 +579,18 @@ class SQLConnectorKARMADB:
                 return raw.id, raw.characters_total
             return None
 
+    def select_bug_components_from_dbo_knownbugs(self, page_id: str):
+        logger = logging.getLogger()
+        self.cursor.execute(
+            "select distinct T.N.value('.','varchar(300)') as nodeName from [dbo].[KnownBugs] cross apply components.nodes('./components/component/name') as T(N) where [KnownPages_id] =?", page_id)
+        raws = self.cursor.fetchall()
+        if raws:
+            answer = []
+            for row in raws:
+                answer.append(row.nodeName)
+            return answer
+        return None
+
     def select_datagram_contribution_from_dbo_knownpages_contribution(self, sql_id: str):
         self.cursor.execute(
             "select [datagram_contribution] from [dbo].[KnownPages_contribution] where [KnownPageID] = ?", sql_id)
