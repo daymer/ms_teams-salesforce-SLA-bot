@@ -387,15 +387,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                     text = '**Voted UP** **"' + page_name + '"** by ' + pretty_name + '\n\n'
                 else:
                     text = '**Voted DOWN** **"' + page_name + '"** by ' + pretty_name + '\n\n'
-                text += 'Top contributor(s):'
-                for key, value in page_stats['contributors_percents'].items():
-                    if key == 'XWiki.bot':
-                        continue
-                    name = str(key).replace('XWiki.', '')
-                    pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
-                                  name[2:]
-                    text += ' ' + pretty_name + ' (' + str(value) + '%),'
-                text = text[:-1] + ';'
+                text += make_top_contributors_text(page_stats=page_stats)
                 text += ' Karma score: ' + str(page_stats['page_karma_score'])
                 team_connection.color('5DADE2')
                 logger_inst.debug('text: ' + str(text))
@@ -437,16 +429,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         else:
                             xwiki_part = 'Administrative'
                         text = 'A **new** article **"' + page_name + '"** was added into the **' + xwiki_part + '** part of the xWiki!\n\n'
-                        text += 'Top contributor(s):'
-                        for key, value in page_stats['contributors_percents'].items():
-                            if key == 'XWiki.bot':
-                                continue
-                            name = str(key).replace('XWiki.', '')
-                            pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
-                                          name[2:]
-                            text += ' ' + pretty_name + ' (' + str(value) + '%),'
-                        text = text[:-1] + ';'
-                        # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
+                        text += make_top_contributors_text(page_stats=page_stats)
                         text += ' Karma score: ' + str(page_stats['page_karma_score'])
                         team_connection.color('C39BD3')
                     team_connection.text(text)
@@ -464,6 +447,28 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
     else:
         logger_inst.error('Threat type' + str(type(threat)) + ' is not supported')
         return False
+
+
+def make_top_contributors_text(page_stats: dict):
+    text = ''
+    logger_inst = logging.getLogger()
+    if len(page_stats['contributors_percents']) < 2 and 'XWiki.bot' in page_stats['contributors_percents']:
+        logger_inst.debug('The only user is bot, no need to add Top contributor(s):')
+        return text
+    else:
+        text += 'Top contributor(s):'
+        for key, value in page_stats['contributors_percents'].items():
+            # if key == 'XWiki.bot':
+            #    continue
+            if key != 'XWiki.bot':
+                name = str(key).replace('XWiki.', '')
+                pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                              name[2:]
+            else:
+                pretty_name = 'Support AI'
+            text += ' ' + pretty_name + ' (' + str(value) + '%),'
+        text = text[:-1] + ';'
+        return text
 
 
 def uri_validator(ulr)->bool:
