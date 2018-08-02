@@ -9,6 +9,8 @@ import sys
 import pymsteams
 import pickle
 import operator
+import requests
+from lxml.html import fromstring
 
 
 class Threat(object):
@@ -459,9 +461,11 @@ def make_top_contributors_text(page_stats: dict):
             # if key == 'XWiki.bot':
             #    continue
             if key != 'XWiki.bot':
-                name = str(key).replace('XWiki.', '')
-                pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
-                              name[2:]
+                pretty_name = find_and_store_a_user_pretty_name(key)
+                if pretty_name is None:
+                    name = str(key).replace('XWiki.', '')
+                    pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
+                                  name[2:]
             else:
                 pretty_name = 'Support AI'
             text += ' ' + pretty_name + ' (' + str(value) + '%),'
@@ -469,6 +473,47 @@ def make_top_contributors_text(page_stats: dict):
         text += ' Karma score: ' + str(page_stats['page_karma_score'])
         # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
         return text
+
+
+def find_and_store_a_user_pretty_name(user_name: str):
+    logger_inst = logging.getLogger()
+    if not user_name.startswith('XWiki.'):
+        logger_inst.debug('find_and_store_a_user_pretty_name for a non-xWiki user, request stopped')
+        return None
+    sql_config_instance_karma_db = configuration.SQLConfigKARMADB()
+    sql_connector_instance_karma_db = SQLConnectorKARMADB(sql_config_instance_karma_db)
+    user_pretty_name = sql_connector_instance_karma_db.select_user_pretty_name(user_name=user_name)
+    if user_pretty_name is None:
+        logger_inst.info('find_and_store_a_user_pretty_name: Pretty User wasn\'t added to a DB yet, resolving...')
+        xwiki_config_instance = configuration.xWikiConfig()
+        try:
+            response = requests.get(xwiki_config_instance.URI+'/bin/view/XWiki/'+user_name.replace('XWiki.', ''))
+            tree = fromstring(response.content)
+            page_title = tree.findtext('.//title')
+            if page_title is not None:
+                regex = r"Profile of (.*) \("
+                matches = re.search(regex, page_title, re.IGNORECASE)
+                if matches:
+                    user_pretty_name = matches.group(1)
+                else:
+                    user_pretty_name = None
+            else:
+                user_pretty_name = None
+            if user_pretty_name is None:
+                logger_inst.info('find_and_store_a_user_pretty_name: Unable to resolve a username of '+ str(user_name))
+                return None
+            else:
+                logger_inst.debug('find_and_store_a_user_pretty_name: Resolved a username, storing into DB')
+                result = sql_connector_instance_karma_db.update_user_pretty_name(user_name=user_name, user_pretty_name=user_pretty_name)
+                if result is True:
+                    return user_pretty_name
+                else:
+                    logger_inst.error('find_and_store_a_user_pretty_name: username was resolved, but was not stored in DB')
+                    return user_pretty_name
+        except Exception as error:
+            return None
+
+
 
 
 def uri_validator(ulr)->bool:
@@ -524,6 +569,28 @@ class SQLConnectorKARMADB:
         if raw:
             return raw.page_title
         return None
+
+    def select_user_pretty_name(self, user_name: str) -> str:
+        self.cursor.execute(
+            "SELECT [user_pretty_name] FROM [dbo].[KnownPages_Users] where [user_name] = ?", user_name)
+        raw = self.cursor.fetchone()
+        if raw:
+            return raw.user_pretty_name
+        return None
+
+    def update_user_pretty_name(self, user_name: str, user_pretty_name: str) -> bool:
+        try:
+            self.cursor.execute(
+                "update [dbo].[KnownPages_Users] set [user_pretty_name] = ? where [user_name] = ?", user_pretty_name, user_name)
+            self.logging_inst.debug('update of USER ' + str(user_name) + ' was completed')
+            self.connection.commit()
+            return True
+        except Exception as error:
+            self.connection.rollback()
+            self.logging_inst.error(
+                'update of USER ' + str(user_name) + ' has failed due to the following error \n' + str(error))
+            self.logging_inst.error('Query arguments: user_pretty_name:' + str(user_pretty_name))
+            return False
 
     def select_page_stats(self, xwd_id):
         result = self.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=xwd_id)
