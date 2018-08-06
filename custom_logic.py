@@ -456,7 +456,8 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         if threat.info_tuple[9] is True:
                             # it's a bug, was fix_link_added?
                             if threat.info_tuple[10] is not None:
-                                text += 'Fix is already available, link: '+str(threat.info_tuple[10])+'\n\n'
+                                text += 'Fix is already available, [click here for download](' + str(
+                                    threat.info_tuple[10]) + ')\n\n'
                             else:
                                 text += 'Fix is currently unavailable\n\n'
                         text += make_top_contributors_text(page_stats=page_stats)
