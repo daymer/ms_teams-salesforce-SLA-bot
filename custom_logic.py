@@ -122,6 +122,8 @@ def find_target_teams_channel_for_karma_event(event_type: str, teams_channels_in
     elif event_type == 'reindex':
         if event_dict['full'] is True:
             target_teams_channel = teams_channels_inst.webhooks_dict['Support Worldwide / General']
+        elif event_dict['fix_link_updated'] is True:
+            target_teams_channel = teams_channels_inst.webhooks_dict['Support Worldwide / General']
         else:
             target_teams_channel = teams_channels_inst.webhooks_dict['xWiki change log']
     elif event_type == 'vote':
@@ -268,12 +270,31 @@ class SQLConnectorELISADB:
             event_dict['user_name'] = None
         if 'full' not in event_dict:
             event_dict['full'] = None
-        event_tuple = (event_type, event_dict['date'], event_dict['target_notification_channel'], event_dict['link'], event_dict['xwd_fullname'], event_dict['user_name'], event_dict['direction'], event_dict['full'])
+            event_dict['is_bug'] = None
+            event_dict['fix_link'] = None
+            event_dict['fix_link_updated'] = None
+        event_tuple = (event_type, event_dict['date'], event_dict['target_notification_channel'], event_dict['link'], event_dict['xwd_fullname'], event_dict['user_name'], event_dict['direction'], event_dict['full']
+                       , event_dict['is_bug'],
+                       event_dict['fix_link'], event_dict['fix_link_updated'])
         try:
             self.cursor.execute(
-                "insert into [dbo].[Karma_events] values(NEWID(),?,?, ?,?,?,0,NULL,?,?,?)",
-                *event_tuple[0:10])
+                "insert into [dbo].[Karma_events]([ID]"
+                    ", [Type]"
+                    ", [CreatedDate]"
+                    ", [TargetNotificationChannel]"
+                    ", [link]"
+                    ", [xwd_fullname]"
+                    ", [NotificationSent]"
+                    ", [NotificationSentDate]"
+                    ", [user_name]"
+                    " ,[direction]"
+                    " ,[full]"
+                    ", [is_bug]"
+                    " ,[fix_link]"
+                    " ,[fix_link_updated]) values(NEWID(),?,?, ?,?,?,0,NULL,?,?,?,?,?,?)",
+                *event_tuple[0:11])
             self.connection.commit()
+            self.logging_inst.debug('insert_into_dbo_karma_events: ' + str(event_type) + ' ' + str(event_dict))
             self.logging_inst.info(
                 '----Insertion of event with xwd ' + event_dict['xwd_fullname'] + ' was completed')
             return True
@@ -326,6 +347,9 @@ class SQLConnectorELISADB:
                 ",[user_name]" \
                 ",[direction]" \
                 ",[full]" \
+                ",[is_bug]"\
+                ",[fix_link]"\
+                ",[fix_link_updated]"\
                 "FROM [dbo].[Karma_events]" \
                     "where [NotificationSent]=0"
         self.cursor.execute(query)
@@ -408,18 +432,17 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                 if page_stats is not None:
                     if threat.info_tuple[8] is False:
                         # it's an increment
-                        text = '**Updated** version of \n**"' + page_name + '"**\nis available on xWiki now\n\n'
-                        text += 'Top contributor(s):'
-                        for key, value in page_stats['contributors_percents'].items():
-                            if key == 'XWiki.bot':
-                                continue
-                            name = str(key).replace('XWiki.', '')
-                            pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
-                                          name[2:]
-                            text += ' ' + pretty_name + ' (' + str(value) + '%),'
-                        text = text[:-1] + ';'
-                        # text += 'Karma score: ' + str(page_stats['page_karma_score']) + ', '+ str(page_stats['up_votes']) +'⇧' + str(page_stats['down_votes']) + '⇩ '
-                        text += ' Karma score: ' + str(page_stats['page_karma_score'])
+                        text = ''
+                        # first, we need to get if it's a bug and we have to use a special logic
+                        if threat.info_tuple[9] is True:
+                            # it's a bug, was fix_link_updated?
+                            text = '**Updated** version of \n**"' + page_name + '"**\nis available on xWiki now\n\n'
+                            if threat.info_tuple[11] is True:
+                                text += 'New fix was added, [click here for download]('+str(threat.info_tuple[10])+')\n\n'
+                                pass
+                        else:
+                            text = '**Updated** version of \n**"' + page_name + '"**\nis available on xWiki now\n\n'
+                        text += make_top_contributors_text(page_stats=page_stats)
                         team_connection.color('F4D03F')
                     else:
                         # it's a full
@@ -430,6 +453,12 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
                         else:
                             xwiki_part = 'Administrative'
                         text = 'A **new** article **"' + page_name + '"** was added into the **' + xwiki_part + '** part of the xWiki!\n\n'
+                        if threat.info_tuple[9] is True:
+                            # it's a bug, was fix_link_added?
+                            if threat.info_tuple[10] is not None:
+                                text += 'Fix is already available, link: '+str(threat.info_tuple[10])+'\n\n'
+                            else:
+                                text += 'Fix is currently unavailable\n\n'
                         text += make_top_contributors_text(page_stats=page_stats)
                         team_connection.color('C39BD3')
                     team_connection.text(text)
@@ -685,6 +714,9 @@ class SQLConnectorKARMADB:
                     ",[link]"\
                     ",[xwd_fullname]" \
                     ",[full] " \
+                    ",[is_bug]" \
+                    ",[fix_link]" \
+                    ",[fix_link_updated]" \
                     "FROM [dbo].[WebRequests_reindex_page_by_XWD_FULLNAME]"\
                     "where [committed]=1 and [result]=1 and datediff(HH,[date],GETDATE()) <= 1 "
         elif event_type == 'vote':
@@ -716,7 +748,9 @@ class SQLConnectorKARMADB:
                         event_info.update({'user_name': row.user_name})
                     if event_type == 'reindex':
                         event_info.update({'full':row.full})
-
+                        event_info.update({'is_bug': row.is_bug})
+                        event_info.update({'fix_link': row.fix_link})
+                        event_info.update({'fix_link_updated': row.fix_link_updated})
                     found_events_list.append(event_info)
         return found_events_list
 

@@ -190,7 +190,6 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
         a_karma_event_rule(sql_connector_instance_karma_db, 'reindex')
         #   WebRequests_vote_for_page_as_user
         a_karma_event_rule(sql_connector_instance_karma_db, 'vote')
-
     # Block B: loading threats
     MainLogger.info('Loading threats')
     threats = []
@@ -752,9 +751,9 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                     existence = False
                 if existence is False:
                     # checking if it's a VCC bug and we need to notify 2 channels at once:
-                    if Threat.info_tuple[8] is True:  # notify only on full
+                    if Threat.info_tuple[8] is True or Threat.info_tuple[9] is True and Threat.info_tuple[11] is True:  # notify only on full or inc which is a bug + new fix
                         if str(Threat.info_tuple[5]).lower().startswith('main.bugs and fixes.found bugs.vbr.bug'):
-                            MainLogger.debug('It\'s a VCC bug and we need to notify 2 channels at once')
+                            MainLogger.debug('It\'s a bug and we need to check if it is a CloudConnect bug to')
                             karma_page_id, chars_total = sql_connector_instance_karma_db.select_id_characters_total_from_dbo_knownpages(platform='xwiki', page_id=Threat.info_tuple[5])
                             bug_components_array = sql_connector_instance_karma_db.select_bug_components_from_dbo_knownbugs(page_id=karma_page_id)
                             if 'CloudConnect' in bug_components_array:
@@ -765,18 +764,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
                                 if result is not True:
                                     MainLogger.error(
                                         'Failed to send notification to ' + str(Threat.target_notification_channel))
-                    result = custom_logic.send_notification_to_web_hook(
-                        web_hook_url=Threat.target_notification_channel,
-                        threat=Threat)
-                    if result is not True:
-                        MainLogger.error('Failed to send notification to ' + str(Threat.target_notification_channel))
-                    else:
-                        result = sql_connector_instance_func.update_dbo_karma_events_after_notification_sent(
-                            row_id=Threat.info_tuple[1])
-                        if result is not True:
-                            MainLogger.critical('Failed to update DB around row:' + str(Threat.info_tuple[1]))
-                        elif result is True:
-                            MainLogger.info('Threat ' + str(Threat.info_tuple[2]) + ' of ' + str(Threat.info_tuple[5]) + ' was neutralized and processed')
+                    channel_notification_sequence(Threat.target_notification_channel, sql_connector_instance_func, Threat)
                 else:
                     # The same event was already fired, no need to repeat
                     result = sql_connector_instance_func.update_dbo_karma_events_after_notification_sent(
@@ -801,8 +789,12 @@ def channel_notification_sequence(target_notification_channel, sql_connector_ins
             'Failed to send notification to ' + str(target_notification_channel))
         return False
     else:
-        result = sql_connector_instance_func.update_dbo_cases_after_notification_sent(
-            row_id=threat.info_tuple[1])
+        if isinstance(threat, custom_logic.CaseSLA):
+            result = sql_connector_instance_func.update_dbo_cases_after_notification_sent(
+                row_id=threat.info_tuple[1])
+        if isinstance(threat, custom_logic.KarmaEvent):
+            result = sql_connector_instance_func.update_dbo_karma_events_after_notification_sent(
+                row_id=threat.info_tuple[1])
         if result is not True:
             logger_inst.critical('Failed to update DB around row:' + str(threat.info_tuple[1]))
             return False
