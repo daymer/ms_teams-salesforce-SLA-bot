@@ -175,7 +175,7 @@ def main_execution(sql_connector_instance_func, teams_channels_inst_func):
     #   A2: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 30
     if proceed_with_a2_rule is True:
         rule_a2 = 31
-        rule_a2_end = 0
+        rule_a2_end = 10
         a_rule(rule_a2, rule_a2_end, s_f_connection, teams_channels_inst_func)
     #   A3: Loading SLA cases from all Tier 1 Queues with potentially broken SLA: RULE 10
     if proceed_with_a3_rule is True:

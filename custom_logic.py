@@ -482,6 +482,7 @@ def send_notification_to_web_hook(web_hook_url: str, threat: Threat):
 def make_top_contributors_text(page_stats: dict):
     text = ''
     logger_inst = logging.getLogger()
+    logger_inst.debug('Starting make_top_contributors_text generation')
     if len(page_stats['contributors_percents']) < 2 and 'XWiki.bot' in page_stats['contributors_percents']:
         logger_inst.debug('The only user is bot, no need to add Top contributor(s):')
         return text
@@ -492,7 +493,9 @@ def make_top_contributors_text(page_stats: dict):
             #    continue
             if key != 'XWiki.bot':
                 pretty_name = find_and_store_a_user_pretty_name(key)
+                logger_inst.debug('make_top_contributors_text generation works on' + str(key))
                 if pretty_name is None:
+                    logger_inst.debug('pretty_name is None, failover to legacy procedure')
                     name = str(key).replace('XWiki.', '')
                     pretty_name = name[:1].capitalize() + '. ' + name[1:2].capitalize() + \
                                   name[2:]
