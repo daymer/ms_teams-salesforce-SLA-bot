@@ -545,7 +545,8 @@ def find_and_store_a_user_pretty_name(user_name: str):
                     return user_pretty_name
         except Exception as error:
             return None
-
+    else:
+        return user_pretty_name
 
 
 
@@ -607,7 +608,9 @@ class SQLConnectorKARMADB:
         self.cursor.execute(
             "SELECT [user_pretty_name] FROM [dbo].[KnownPages_Users] where [user_name] = ?", user_name)
         raw = self.cursor.fetchone()
+        self.logging_inst.debug('select_user_pretty_name: ' + str(raw))
         if raw:
+            self.logging_inst.debug(raw.user_pretty_name)
             return raw.user_pretty_name
         return None
 
